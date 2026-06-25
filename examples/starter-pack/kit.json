@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "kitName": "Starter Kit",
+  "author": "KitForge",
+  "description": "Example native KitForge pack metadata",
+  "tags": ["starter", "acoustic"],
+  "pieces": []
+}

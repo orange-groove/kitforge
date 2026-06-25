@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "catalogUrl": "https://catalog.kitforge.app/drum-libraries/manifest.json",
+  "_todo": "Fill downloadUrl for each library after verifying license and hosting. Remote manifest can replace this bundled file.",
+  "libraries": [
+    {
+      "id": "demo-rock-kit",
+      "name": "Demo Rock Kit (Offline)",
+      "format": "kitforgepack",
+      "license": "Demo / internal use",
+      "sizeMb": 0.9,
+      "homepageUrl": "",
+      "downloadUrl": "",
+      "tags": ["demo", "rock", "offline", "recommended"],
+      "description": "Bundled demo pack with real drum one-shots for offline testing.",
+      "recommended": true
+    },
+    {
+      "id": "salamander-drumkit",
+      "name": "Salamander Drumkit",
+      "format": "sfz",
+      "license": "CC-BY-SA-3.0",
+      "sizeMb": 370,
+      "homepageUrl": "https://freepats.zenvoid.org/",
+      "downloadUrl": "",
+      "tags": ["acoustic", "rock", "multi-velocity", "round-robin", "open-source"],
+      "description": "Open SFZ acoustic drum kit. Attribution required (CC-BY-SA). Download URL TODO — verify upstream before enabling.",
+      "recommended": true
+    },
+    {
+      "id": "sm-drums",
+      "name": "SM Drums",
+      "format": "sfz",
+      "license": "verify-before-redistribution",
+      "sizeMb": 2200,
+      "homepageUrl": "",
+      "downloadUrl": "",
+      "tags": ["acoustic", "studio", "multi-velocity", "realistic"],
+      "description": "Large detailed acoustic drum library. License and download URL must be verified before redistribution.",
+      "recommended": true
+    },
+    {
+      "id": "virtuosity-drums",
+      "name": "Virtuosity Drums",
+      "format": "sfz",
+      "license": "verify-before-redistribution",
+      "sizeMb": 850,
+      "homepageUrl": "",
+      "downloadUrl": "",
+      "tags": ["acoustic", "multi-velocity", "orchestral"],
+      "description": "Expressive multi-layered drum library. Download URL TODO.",
+      "recommended": false
+    },
+    {
+      "id": "muldjord-kit",
+      "name": "Muldjord Kit",
+      "format": "sfz",
+      "license": "verify-before-redistribution",
+      "sizeMb": 420,
+      "homepageUrl": "",
+      "downloadUrl": "",
+      "tags": ["acoustic", "indie", "multi-velocity"],
+      "description": "Indie-oriented acoustic kit. Download URL TODO.",
+      "recommended": false
+    },
+    {
+      "id": "naked-drums",
+      "name": "Naked Drums",
+      "format": "sfz",
+      "license": "verify-before-redistribution",
+      "sizeMb": 600,
+      "homepageUrl": "",
+      "downloadUrl": "",
+      "tags": ["acoustic", "dry", "studio"],
+      "description": "Dry studio drum samples. Download URL TODO.",
+      "recommended": false
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "Modern Metal",
+  "description": "Tight punchy metal kit generated from AI recipe",
+  "tags": ["metal", "modern", "tight"],
+  "pieces": [
+    {
+      "type": "kick",
+      "name": "Kick",
+      "articulation": "Hit",
+      "preferredMidiNote": 36,
+      "tags": ["metal", "punchy", "tight"]
+    },
+    {
+      "type": "snare",
+      "name": "Snare",
+      "articulation": "Center",
+      "preferredMidiNote": 38,
+      "tags": ["metal", "tight"]
+    },
+    {
+      "type": "hiHat",
+      "name": "Hi-Hat",
+      "articulation": "Closed",
+      "preferredMidiNote": 42,
+      "chokeGroupId": "hat",
+      "tags": ["metal", "tight"]
+    },
+    {
+      "type": "crash",
+      "name": "Crash",
+      "articulation": "Hit",
+      "preferredMidiNote": 49,
+      "tags": ["metal"]
+    }
+  ]
+}

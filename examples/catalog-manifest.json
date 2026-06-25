@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "catalogUrl": "https://catalog.kitforge.app/manifest.json",
+  "kits": [
+    {
+      "id": "sm-drums",
+      "name": "SM Drums",
+      "format": "sfz",
+      "sizeMb": 2200,
+      "downloadUrl": "https://catalog.kitforge.app/kits/sm-drums.zip",
+      "thumbnail": "https://catalog.kitforge.app/thumbs/sm-drums.png",
+      "description": "Multi-velocity acoustic rock kit",
+      "version": "1.0.0",
+      "tags": ["rock", "acoustic", "multi-velocity"]
+    },
+    {
+      "id": "jazz-brush-kit",
+      "name": "Jazz Brush Kit",
+      "format": "kitforgepack",
+      "sizeMb": 480,
+      "downloadUrl": "https://catalog.kitforge.app/kits/jazz-brush-kit.kitforgepack",
+      "thumbnail": "https://catalog.kitforge.app/thumbs/jazz-brush.png",
+      "description": "Dry jazz kit with brush articulations",
+      "version": "0.9.0",
+      "tags": ["jazz", "brushes", "dry"]
+    }
+  ]
+}

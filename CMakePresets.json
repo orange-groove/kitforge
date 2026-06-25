@@ -1,0 +1,56 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "ninja-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "KITFORGE_COPY_PLUGIN_AFTER_BUILD": "OFF"
+      }
+    },
+    {
+      "name": "ninja-debug",
+      "displayName": "Ninja Debug",
+      "description": "Fast dev builds — Standalone, no plugin install",
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "ninja-release",
+      "displayName": "Ninja Release",
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "standalone-debug",
+      "displayName": "KitForge Standalone (Debug)",
+      "configurePreset": "ninja-debug",
+      "targets": ["KitForge_Standalone"]
+    },
+    {
+      "name": "standalone-release",
+      "displayName": "KitForge Standalone (Release)",
+      "configurePreset": "ninja-release",
+      "targets": ["KitForge_Standalone"]
+    },
+    {
+      "name": "all-debug",
+      "displayName": "All targets (Debug)",
+      "configurePreset": "ninja-debug"
+    }
+  ]
+}
