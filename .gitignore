@@ -1,0 +1,69 @@
+# macOS
+.DS_Store
+._*
+
+# CMake / Ninja build trees
+/build/
+/build-*/
+/cmake-build-*/
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+build.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+
+# FetchContent and generated artefacts (inside build dirs; explicit for safety)
+_deps/
+KitForge_artefacts/
+juce_binarydata_*/
+juce_vst3_helper
+
+# Compiled objects and libraries
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+
+# JUCE / plugin bundles (when copied outside build/)
+*.vst3
+*.component
+*.app
+
+# IDE and editor
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*~
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Python (scripts/)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local secrets and env overrides
+.env
+.env.*
+settings.json
+
+# Sample fetch temp files (see scripts/fetch_demo_samples.sh)
+Resources/demo-samples/.fetch_tmp/
+Resources/demo-samples/tmp/
+
+# Logs and crash dumps
+*.log
+*.dSYM/
