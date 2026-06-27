@@ -124,7 +124,12 @@ export function DrumCanvas({
 
   const panDrag = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   const pendingInteraction = useRef<PendingInteraction | null>(null);
-  const pieceDrag = useRef<{ pieceId: string; pointerId: number } | null>(null);
+  const pieceDrag = useRef<{
+    pieceId: string;
+    pointerId: number;
+    grabDX: number;
+    grabDY: number;
+  } | null>(null);
   const layoutDragPos = useRef<Record<string, { x: number; y: number }>>({});
   const [, bumpLayoutDrag] = useState(0);
 
@@ -420,7 +425,7 @@ export function DrumCanvas({
     if (pieceDrag.current && editLayout) {
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const center = screenToNormalizedCenter(
+      const pointer = screenToNormalizedCenter(
         e.clientX,
         e.clientY,
         rect,
@@ -428,6 +433,10 @@ export function DrumCanvas({
         refW,
         refH,
       );
+      const center = {
+        x: pointer.x - pieceDrag.current.grabDX,
+        y: pointer.y - pieceDrag.current.grabDY,
+      };
       layoutDragPos.current = {
         ...layoutDragPos.current,
         [pieceDrag.current.pieceId]: center,
@@ -768,7 +777,27 @@ export function DrumCanvas({
                       if (!editLayout || e.button !== 0) return;
                       e.stopPropagation();
                       pendingInteraction.current = null;
-                      pieceDrag.current = { pieceId: piece.id, pointerId: e.pointerId };
+                      const rect = containerRef.current?.getBoundingClientRect();
+                      let grabDX = 0;
+                      let grabDY = 0;
+                      if (rect) {
+                        const pointer = screenToNormalizedCenter(
+                          e.clientX,
+                          e.clientY,
+                          rect,
+                          viewportRef.current,
+                          refW,
+                          refH,
+                        );
+                        grabDX = pointer.x - (displayPiece.x + displayPiece.width * 0.5);
+                        grabDY = pointer.y - (displayPiece.y + displayPiece.height * 0.5);
+                      }
+                      pieceDrag.current = {
+                        pieceId: piece.id,
+                        pointerId: e.pointerId,
+                        grabDX,
+                        grabDY,
+                      };
                       containerRef.current?.setPointerCapture(e.pointerId);
                       onSelectPiece(piece.id, edgeArt?.id ?? null);
                     }}
