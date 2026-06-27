@@ -284,6 +284,7 @@ void WebViewBridge::dispatchMessage (const juce::var& message)
     else if (type == "movePiece")                  handleMovePiece (message);
     else if (type == "resizePiece")               handleResizePiece (message);
     else if (type == "learnMidi")                 handleLearnMidi (message);
+    else if (type == "cancelLearnMidi")           handleCancelLearnMidi (message);
     else if (type == "assignSample")              handleAssignSample (message);
     else if (type == "updatePiece")               handleUpdatePiece (message);
     else if (type == "renamePiece")               handleRenamePiece (message);
@@ -379,6 +380,12 @@ void WebViewBridge::handleLearnMidi (const juce::var& message)
     msg.getDynamicObject()->setProperty ("pieceId", pieceId);
     msg.getDynamicObject()->setProperty ("articulationId", artId);
     sendToWeb (msg);
+}
+
+void WebViewBridge::handleCancelLearnMidi (const juce::var&)
+{
+    processor.getMidiLearnManager().cancelLearning();
+    wasMidiLearning = false;
 }
 
 void WebViewBridge::handleAssignSample (const juce::var& message)

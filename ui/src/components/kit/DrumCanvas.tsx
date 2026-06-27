@@ -46,6 +46,10 @@ interface DrumCanvasProps {
   editLayout: boolean;
   onSelectPiece: (pieceId: string | null, articulationId?: string | null) => void;
   onSwapSamples: (target: SwapTarget) => void;
+  /** Piece currently listening in the Learn My Kit wizard (blue highlight). */
+  learnActivePieceId?: string | null;
+  /** Pieces already learned in the wizard (green highlight). */
+  learnDonePieceIds?: Set<string>;
 }
 
 const CLICK_SLOP_PX = 6;
@@ -115,6 +119,8 @@ export function DrumCanvas({
   editLayout,
   onSelectPiece,
   onSwapSamples,
+  learnActivePieceId = null,
+  learnDonePieceIds,
 }: DrumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -544,6 +550,8 @@ export function DrumCanvas({
             const { cx, cy, r } = pieceCircleGeometry(displayPiece, refW, refH);
             const selected = selectedPieceId === piece.id;
             const hit = hitPieceIds.has(piece.id);
+            const learnListening = learnActivePieceId === piece.id;
+            const learnDone = learnDonePieceIds?.has(piece.id) ?? false;
             const cymbal = isCymbalPiece(piece);
             const kick = isKickPiece(piece);
             const isRide = isRidePiece(piece);
@@ -803,6 +811,48 @@ export function DrumCanvas({
                     }}
                   />
                 )}
+
+                {(learnListening || learnDone) &&
+                  (kick ? (
+                    <rect
+                      x={cx - r - selectionPad * 2}
+                      y={cy - r - selectionPad * 2}
+                      width={2 * (r + selectionPad * 2)}
+                      height={2 * (r + selectionPad * 2)}
+                      fill="none"
+                      stroke={learnListening ? "#5b8def" : "#34c759"}
+                      strokeWidth={strokeW(4)}
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {learnListening && (
+                        <animate
+                          attributeName="opacity"
+                          values="0.4;1;0.4"
+                          dur="1.1s"
+                          repeatCount="indefinite"
+                        />
+                      )}
+                    </rect>
+                  ) : (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={r + selectionPad * 2}
+                      fill="none"
+                      stroke={learnListening ? "#5b8def" : "#34c759"}
+                      strokeWidth={strokeW(4)}
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {learnListening && (
+                        <animate
+                          attributeName="opacity"
+                          values="0.4;1;0.4"
+                          dur="1.1s"
+                          repeatCount="indefinite"
+                        />
+                      )}
+                    </circle>
+                  ))}
               </g>
             );
           })}

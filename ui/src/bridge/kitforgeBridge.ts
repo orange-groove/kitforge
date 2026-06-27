@@ -77,6 +77,7 @@ export const kitforgeBridge = {
     sendRaw({ type: "resizePiece", pieceId, width, height }),
   learnMidi: (pieceId: string, articulationId: string) =>
     sendRaw({ type: "learnMidi", pieceId, articulationId }),
+  cancelLearnMidi: () => sendRaw({ type: "cancelLearnMidi" }),
   assignSample: (pieceId: string, articulationId: string) =>
     sendRaw({ type: "assignSample", pieceId, articulationId }),
   updatePiece: (

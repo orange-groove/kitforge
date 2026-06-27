@@ -55,6 +55,7 @@ private:
     void handleMovePiece (const juce::var& message);
     void handleResizePiece (const juce::var& message);
     void handleLearnMidi (const juce::var& message);
+    void handleCancelLearnMidi (const juce::var& message);
     void handleAssignSample (const juce::var& message);
     void handleUpdatePiece (const juce::var& message);
     void handleRenamePiece (const juce::var& message);

@@ -5,12 +5,16 @@ interface TopBarProps {
   kitName: string;
   editLayout: boolean;
   onToggleEditLayout: () => void;
+  onStartLearn: () => void;
+  learnActive: boolean;
 }
 
 export function TopBar({
   kitName,
   editLayout,
   onToggleEditLayout,
+  onStartLearn,
+  learnActive,
 }: TopBarProps) {
   return (
     <Flex
@@ -31,6 +35,15 @@ export function TopBar({
         </Box>
       </HStack>
       <HStack spacing={2}>
+        <Button
+          size="sm"
+          variant="solid"
+          colorScheme="blue"
+          onClick={onStartLearn}
+          isDisabled={learnActive}
+        >
+          {learnActive ? "Learning…" : "Learn My Kit"}
+        </Button>
         <Button
           size="sm"
           variant={editLayout ? "solid" : "outline"}

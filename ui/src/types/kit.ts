@@ -201,6 +201,7 @@ export type OutboundMessage =
   | { type: "movePiece"; pieceId: string; x: number; y: number; finalize?: boolean }
   | { type: "resizePiece"; pieceId: string; width: number; height: number }
   | { type: "learnMidi"; pieceId: string; articulationId: string }
+  | { type: "cancelLearnMidi" }
   | { type: "assignSample"; pieceId: string; articulationId: string }
   | { type: "updatePiece"; pieceId: string; volume?: number; pan?: number; pitch?: number; muted?: boolean; soloed?: boolean }
   | { type: "renamePiece"; pieceId: string; name: string }

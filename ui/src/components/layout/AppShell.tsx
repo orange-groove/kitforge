@@ -4,6 +4,8 @@ import { TopBar } from "./TopBar";
 import { SidePanel } from "./SidePanel";
 import { DrumCanvas } from "../kit/DrumCanvas";
 import { KitInspector } from "../kit/KitInspector";
+import { LearnKitBanner } from "../kit/LearnKitBanner";
+import { useLearnKitWizard } from "../kit/useLearnKitWizard";
 import type { DrumPiece, InstalledKit, KitModel, SwapTarget } from "../../types/kit";
 
 interface AppShellProps {
@@ -27,6 +29,7 @@ export function AppShell({
 }: AppShellProps) {
   const [tabIndex, setTabIndex] = useState(0);
   const [editLayout, setEditLayout] = useState(false);
+  const learn = useLearnKitWizard(kit);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedArticulationId, setSelectedArticulationId] = useState<string | null>(null);
   const [selectedArticulationName, setSelectedArticulationName] = useState<string | null>(
@@ -60,6 +63,8 @@ export function AppShell({
         kitName={kit.kitName}
         editLayout={editLayout}
         onToggleEditLayout={() => setEditLayout((v) => !v)}
+        onStartLearn={learn.start}
+        learnActive={learn.active}
       />
       <Flex flex="1" minH={0}>
         <SidePanel
@@ -71,13 +76,15 @@ export function AppShell({
           onAiGenerate={onAiGenerate}
           onMapLibrary={onMapLibrary}
         />
-        <Box flex="1" p={3} display="flex" minW={0}>
+        <Box flex="1" p={3} display="flex" minW={0} position="relative">
           <DrumCanvas
             kit={kit}
             selectedPieceId={selectedId}
             selectedArticulationId={selectedArticulationId}
             editLayout={editLayout}
             onSwapSamples={onSwapSamples}
+            learnActivePieceId={learn.activePieceId}
+            learnDonePieceIds={learn.donePieceIds}
             onSelectPiece={(pieceId, articulationId) => {
               setSelectedId(pieceId);
               if (pieceId == null) {
@@ -96,6 +103,7 @@ export function AppShell({
               setSelectedArticulationName(art?.name ?? null);
             }}
           />
+          <LearnKitBanner wizard={learn} />
         </Box>
         <Box
           w="260px"
