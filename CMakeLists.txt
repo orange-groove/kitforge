@@ -43,6 +43,8 @@ juce_add_plugin(KitForge
     PLUGIN_MANUFACTURER_CODE KtFg
     PLUGIN_CODE Kitf
     FORMATS AU VST3 Standalone
+    BLUETOOTH_PERMISSION_ENABLED TRUE
+    BLUETOOTH_PERMISSION_TEXT "KitForge uses Bluetooth to connect wireless MIDI controllers and drum pads."
     PRODUCT_NAME "KitForge")
 
 juce_add_binary_data(KitForgeDemoSamples

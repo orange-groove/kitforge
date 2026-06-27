@@ -45,16 +45,10 @@ export function SidePanel({
         size="sm"
       >
         <TabList borderColor="kit.border" flexShrink={0}>
-          <Tab _selected={{ bg: "kit.bg", borderColor: "kit.border" }}>Kit</Tab>
           <Tab _selected={{ bg: "kit.bg", borderColor: "kit.border" }}>Library</Tab>
           <Tab _selected={{ bg: "kit.bg", borderColor: "kit.border" }}>AI</Tab>
         </TabList>
         <TabPanels flex="1" minH={0} overflow="hidden" display="flex" flexDirection="column">
-          <TabPanel p={0} flex="1" minH={0} overflowY="auto">
-            <Box p={3} fontSize="sm" color="kit.textMuted">
-              Use the canvas to select pieces. Toggle Edit Layout in the top bar to drag pieces.
-            </Box>
-          </TabPanel>
           <TabPanel p={0} flex="1" minH={0} overflowY="auto">
             <LibraryBrowserPanel installed={installed} onMapLibrary={onMapLibrary} />
           </TabPanel>

@@ -16,6 +16,14 @@ export const theme = extendTheme({
         background: "#121212",
         color: "#e8e8e8",
         overflow: "hidden",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+      },
+      // Keep text editable controls usable (caret + typing) despite the
+      // app-wide selection lock above.
+      "input, textarea, [contenteditable='true']": {
+        userSelect: "text",
+        WebkitUserSelect: "text",
       },
       ":root": {
         "--audioui-unit": "42px",

@@ -5,11 +5,8 @@ import {
   Divider,
   Flex,
   Heading,
-  NumberDecrementStepper,
-  NumberIncrementStepper,
   NumberInput,
   NumberInputField,
-  NumberInputStepper,
   Stack,
   Switch,
   Text,
@@ -22,7 +19,7 @@ import {
   semitonesFromPitchRatio,
 } from "../../bridge/kitforgeBridge";
 import { PieceMixControls } from "../controls/VolumePanControls";
-import { findArticulationByName, isRidePiece, rideEdgeArticulation } from "./layoutUtils";
+import { isRidePiece, rideEdgeArticulation } from "./layoutUtils";
 
 interface KitInspectorProps {
   piece: DrumPiece | null;
@@ -43,13 +40,12 @@ export function KitInspector({
       piece.articulations[0]
     : undefined;
 
-  const [midiDraft, setMidiDraft] = useState("");
+  const [midiDrafts, setMidiDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setMidiDraft(activeArticulation ? String(activeArticulation.midiNote) : "");
-    // Resync only when the selected piece/articulation changes (not on every echo).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [piece?.id, activeArticulation?.id, activeArticulation?.midiNote]);
+    // Drop in-progress edits when switching pieces so inputs resync to the model.
+    setMidiDrafts({});
+  }, [piece?.id]);
 
   if (!piece) {
     return (
@@ -62,11 +58,11 @@ export function KitInspector({
   const semitones =
     piece.pitchSemitones ?? semitonesFromPitchRatio(piece.pitch);
 
-  const commitMidiNote = (raw: string) => {
+  const commitArticulationMidi = (articulationId: string, raw: string) => {
     const n = parseInt(raw, 10);
-    if (Number.isNaN(n) || !activeArticulation) return;
+    if (Number.isNaN(n)) return;
     const clamped = Math.max(0, Math.min(127, n));
-    kitforgeBridge.setArticulationMidi(piece.id, activeArticulation.id, clamped);
+    kitforgeBridge.setArticulationMidi(piece.id, articulationId, clamped);
   };
 
   return (
@@ -76,14 +72,6 @@ export function KitInspector({
       </Heading>
       <Stack spacing={0.5} fontSize="sm" color="kit.textMuted" mb={4}>
         <Text>Type: {piece.type}</Text>
-        {isRidePiece(piece) ? (
-          <Text>Edge MIDI: {rideEdgeArticulation(piece)?.midiNote ?? piece.primaryMidiNote}</Text>
-        ) : (
-          <Text>Primary MIDI: {piece.primaryMidiNote}</Text>
-        )}
-        {isRidePiece(piece) && findArticulationByName(piece, "Bell") && (
-          <Text>Bell MIDI: {findArticulationByName(piece, "Bell")!.midiNote}</Text>
-        )}
       </Stack>
 
       <PieceMixControls
@@ -151,9 +139,38 @@ export function KitInspector({
             >
               <Box>
                 <Text fontWeight="medium">{art.name}</Text>
-                <Text color="kit.textMuted" fontSize="xs">
-                  MIDI {art.midiNote}
-                </Text>
+                <Flex
+                  align="center"
+                  gap={1}
+                  mt={1}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <Text color="kit.textMuted" fontSize="xs">
+                    MIDI
+                  </Text>
+                  <NumberInput
+                    size="xs"
+                    min={0}
+                    max={127}
+                    w="58px"
+                    value={midiDrafts[art.id] ?? String(art.midiNote)}
+                    onChange={(valueString) => {
+                      setMidiDrafts((d) => ({ ...d, [art.id]: valueString }));
+                      commitArticulationMidi(art.id, valueString);
+                    }}
+                    onBlur={() =>
+                      setMidiDrafts((d) => {
+                        const next = { ...d };
+                        delete next[art.id];
+                        return next;
+                      })
+                    }
+                    clampValueOnBlur
+                  >
+                    <NumberInputField px={2} textAlign="center" />
+                  </NumberInput>
+                </Flex>
               </Box>
               <Badge colorScheme={hasSample ? "green" : "gray"}>
                 {hasSample ? "Sample" : "Empty"}
@@ -170,27 +187,6 @@ export function KitInspector({
 
       {activeArticulation && (
         <Stack spacing={2} mt={4}>
-          <Flex align="center" justify="space-between" gap={2}>
-            <Text fontSize="sm">Trigger MIDI note</Text>
-            <NumberInput
-              size="sm"
-              min={0}
-              max={127}
-              w="96px"
-              value={midiDraft}
-              onChange={(valueString) => {
-                setMidiDraft(valueString);
-                commitMidiNote(valueString);
-              }}
-              clampValueOnBlur
-            >
-              <NumberInputField />
-              <NumberInputStepper>
-                <NumberIncrementStepper />
-                <NumberDecrementStepper />
-              </NumberInputStepper>
-            </NumberInput>
-          </Flex>
           <Button
             size="sm"
             w="100%"
