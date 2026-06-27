@@ -1,6 +1,7 @@
 #include "LooseSampleFolderImporter.h"
 #include "KitModelBuilder.h"
 #include "SampleNameParser.h"
+#include "LlmSampleClassifier.h"
 
 ImportResult LooseSampleFolderImporter::scanFolder (const juce::File& folder) const
 {
@@ -54,6 +55,8 @@ ImportResult LooseSampleFolderImporter::scanFolder (const juce::File& folder) co
         result.errorMessage = "No WAV files found in folder.";
         return result;
     }
+
+    LlmSampleClassifier::classify (result.kitName, parsedSamples);
 
     result.kit = KitModelBuilder::buildFromMetadata (result.kitName, parsedSamples, result.warnings);
     result.stats = ImportResult::computeStats (result.kit, wavCount);

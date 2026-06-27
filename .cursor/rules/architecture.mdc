@@ -1,0 +1,34 @@
+---
+description: KitForge core architecture, ownership, and data model
+alwaysApply: true
+---
+
+# KitForge
+
+KitForge is a professional drum sampler (JUCE audio engine + React/TypeScript/Vite/Chakra UI + Cutoff Audio UI). It should feel like a modern commercial instrument (EZDrummer, Superior Drummer, Steven Slate Drums).
+
+## Ownership
+
+JUCE (C++) owns: audio processing, MIDI, sample playback, the KitModel, SFZ/WAV importing, package load/save, native file dialogs, downloads, library management.
+
+React owns: drum canvas, kit editor, library browser, AI Builder, settings, inspector panels.
+
+**React is NEVER the source of truth — the C++ `KitModel` is always authoritative.**
+
+## Internal model
+
+`KitModel` → `DrumPiece` → `Articulation` → `SampleLayer` → RoundRobin samples.
+
+- A `DrumPiece` is NEVER a single sample.
+- Always preserve support for: velocity layers, round robins, articulations, choke groups, future multi-outputs.
+
+## Native format (`.kitforge`)
+
+A `.kitforge` package is a ZIP archive containing: `manifest.json`, `kit.json`, `samples/`, `artwork/`, `preview/`, `license.txt`, `credits.txt`.
+
+- Runtime always loads `KitModel`. Never load SFZ directly during playback.
+- External formats (SFZ, loose WAV) are IMPORT ONLY → immediately convert to `KitModel` → export as `.kitforge`.
+
+## WebView bridge
+
+React ↔ JUCE communicate via JSON: React requests actions, C++ mutates `KitModel`, C++ sends updated kit state back. Never do audio processing, downloads, or file IO inside React.

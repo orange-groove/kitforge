@@ -1,31 +1,9 @@
 #include "InstalledLibrariesPanel.h"
 #include "../PluginProcessor.h"
-#include "../Importers/SFZImporter.h"
-#include "../Importers/LooseSampleFolderImporter.h"
-#include "../Importers/KontaktImporter.h"
-#include "../Importers/ImportInstallHelper.h"
-#include "../Importers/KitForgePackImporter.h"
-#include "../Models/InstalledLibrary.h"
+#include "../Serialization/KitForgePackageReader.h"
+#include "../Core/KitImportService.h"
+#include "../Core/KitForgePaths.h"
 #include "LibraryImportFlow.h"
-
-namespace
-{
-    void showImportPreview (InstalledLibrariesPanel* panel,
-                            KitForgeAudioProcessor& processor,
-                            ImportResult result)
-    {
-        LibraryImportFlow::showPreviewAndMap (panel,
-                                              processor,
-                                              std::move (result),
-                                              [&processor] (ImportResult& confirmed)
-                                              {
-                                                  return ImportInstallHelper::installToLibraries (
-                                                      confirmed,
-                                                      processor.getServices().getSampleIndex());
-                                              },
-                                              [panel] { panel->refresh(); });
-    }
-}
 
 InstalledLibrariesPanel::InstalledLibrariesPanel (KitForgeAudioProcessor& processorIn)
     : processorRef (processorIn)
@@ -37,13 +15,13 @@ InstalledLibrariesPanel::InstalledLibrariesPanel (KitForgeAudioProcessor& proces
     addAndMakeVisible (removeButton);
     addAndMakeVisible (revealButton);
     addAndMakeVisible (importFolderButton);
-    addAndMakeVisible (importKontaktButton);
     addAndMakeVisible (importSfzButton);
+    addAndMakeVisible (importKitforgeButton);
     addAndMakeVisible (libraryList);
 
     rescanButton.onClick = [this]
     {
-        processorRef.getServices().getSampleIndex().scanLibrariesOnDisk();
+        processorRef.getServices().getSampleIndex().scanKitsOnDisk();
         refresh();
     };
 
@@ -63,26 +41,24 @@ InstalledLibrariesPanel::InstalledLibrariesPanel (KitForgeAudioProcessor& proces
                                   if (! folder.isDirectory())
                                       return;
 
-                                  LooseSampleFolderImporter importer;
-                                  showImportPreview (this, processorRef, importer.scanFolder (folder));
-                              });
-    };
+                                  juce::Thread::launch ([this, folder]
+                                  {
+                                      auto result = processorRef.getServices().getKitImportService().importLooseFolder (
+                                          folder, processorRef.getServices().getLooseFolderImporter());
 
-    importKontaktButton.onClick = [this]
-    {
-        auto chooser = std::make_shared<juce::FileChooser> ("Import Kontakt Library", juce::File());
+                                      juce::MessageManager::callAsync ([this, result]
+                                      {
+                                          if (! result.success)
+                                          {
+                                              juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon,
+                                                                                      "Import Failed",
+                                                                                      result.errorMessage);
+                                              return;
+                                          }
 
-        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-                              [this, chooser] (const juce::FileChooser& fc)
-                              {
-                                  const auto folder = fc.getResult();
-
-                                  if (! folder.isDirectory())
-                                      return;
-
-                                  showImportPreview (this,
-                                                     processorRef,
-                                                     processorRef.getServices().getKontaktImporter().importLibraryFolder (folder));
+                                          refresh();
+                                      });
+                                  });
                               });
     };
 
@@ -98,14 +74,56 @@ InstalledLibrariesPanel::InstalledLibrariesPanel (KitForgeAudioProcessor& proces
                                   if (! file.existsAsFile())
                                       return;
 
-                                  SFZImportOptions options;
-                                  options.sfzFilePath = file.getFullPathName();
-                                  options.sampleRootPath = file.getParentDirectory().getFullPathName();
-                                  options.kitName = file.getFileNameWithoutExtension();
+                                  juce::Thread::launch ([this, file]
+                                  {
+                                      auto result = processorRef.getServices().getKitImportService().importSfzFile (
+                                          file, processorRef.getServices().getSFZImporter());
 
-                                  showImportPreview (this,
-                                                     processorRef,
-                                                     processorRef.getServices().getSFZImporter().importFile (options));
+                                      juce::MessageManager::callAsync ([this, result]
+                                      {
+                                          if (! result.success)
+                                          {
+                                              juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon,
+                                                                                      "Import Failed",
+                                                                                      result.errorMessage);
+                                              return;
+                                          }
+
+                                          refresh();
+                                      });
+                                  });
+                              });
+    };
+
+    importKitforgeButton.onClick = [this]
+    {
+        auto chooser = std::make_shared<juce::FileChooser> ("Install KitForge Package", juce::File(), "*.kitforge");
+
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this, chooser] (const juce::FileChooser& fc)
+                              {
+                                  const auto file = fc.getResult();
+
+                                  if (! file.existsAsFile())
+                                      return;
+
+                                  juce::Thread::launch ([this, file]
+                                  {
+                                      auto result = processorRef.getServices().getKitImportService().installKitforgeFile (file);
+
+                                      juce::MessageManager::callAsync ([this, result]
+                                      {
+                                          if (! result.success)
+                                          {
+                                              juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon,
+                                                                                      "Install Failed",
+                                                                                      result.errorMessage);
+                                              return;
+                                          }
+
+                                          refresh();
+                                      });
+                                  });
                               });
     };
 
@@ -129,29 +147,18 @@ void InstalledLibrariesPanel::mapSelectedLibraryToKit()
     if (lib == nullptr)
         return;
 
-    const auto kitRoot = lib->getKitJsonFile().getParentDirectory();
+    const auto loaded = KitForgePackageReader::loadInstalledKit (lib->getRoot());
 
-    if (! lib->getKitJsonFile().existsAsFile())
+    if (! loaded.success)
     {
         juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon,
                                                 "Map Samples",
-                                                "No sample catalog found for this library.");
+                                                loaded.errorMessage);
         return;
     }
 
-    KitForgePackImporter importer;
-    const auto result = importer.importFolder (kitRoot);
-
-    if (! result.success)
-    {
-        juce::AlertWindow::showMessageBoxAsync (juce::AlertWindow::WarningIcon,
-                                                "Map Samples",
-                                                result.errorMessage);
-        return;
-    }
-
-    auto libraryCatalog = result.kit;
-    libraryCatalog.resolveSamplePaths (kitRoot);
+    auto libraryCatalog = loaded.kit;
+    libraryCatalog.resolveSamplePaths (lib->getRoot());
 
     LibraryImportFlow::showMappingForInstalledLibrary (this,
                                                        processorRef,
@@ -171,7 +178,7 @@ void InstalledLibrariesPanel::removeSelectedLibrary()
     if (root.exists())
         root.deleteRecursively();
 
-    processorRef.getServices().getSampleIndex().scanLibrariesOnDisk();
+    processorRef.getServices().getSampleIndex().scanKitsOnDisk();
     selectedRow = -1;
     refresh();
 }
@@ -219,9 +226,9 @@ void InstalledLibrariesPanel::resized()
     buttonRow.removeFromLeft (6);
     importFolderButton.setBounds (buttonRow.removeFromLeft (120));
     buttonRow.removeFromLeft (6);
-    importKontaktButton.setBounds (buttonRow.removeFromLeft (130));
-    buttonRow.removeFromLeft (6);
     importSfzButton.setBounds (buttonRow.removeFromLeft (110));
+    buttonRow.removeFromLeft (6);
+    importKitforgeButton.setBounds (buttonRow.removeFromLeft (130));
 
     area.removeFromTop (8);
     libraryList.setBounds (area);
@@ -245,10 +252,13 @@ void InstalledLibrariesPanel::paintListBoxItem (int row, juce::Graphics& g, int 
         g.fillAll (juce::Colour (0xff3d5a80));
 
     g.setColour (juce::Colours::white);
-    juce::String line = lib.name + "  [" + lib.format + "]";
+    juce::String line = lib.name + "  v" + lib.version;
 
-    if (lib.pieceCount > 0)
-        line += "  " + juce::String (lib.pieceCount) + " pieces";
+    if (lib.author.isNotEmpty())
+        line += "  · " + lib.author;
+
+    if (lib.sampleCount > 0)
+        line += "  · " + juce::String (lib.sampleCount) + " samples";
 
     g.drawText (line, 8, 0, w - 16, h, juce::Justification::centredLeft, true);
 }

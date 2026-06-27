@@ -29,10 +29,11 @@ public:
     bool saveCachedManifestToDisk() const;
 
     bool isLibraryInstalled (const juce::String& libraryId) const;
+    bool isPartialInstall (const juce::String& libraryId) const;
     InstalledLibrary getInstalledLibrary (const juce::String& libraryId) const;
     bool removeInstalledLibrary (const juce::String& libraryId);
 
-    /** Resolve download URL — injects demo pack file:// URL when configured. */
+    /** Resolve download URL from catalog entry. */
     juce::String resolveDownloadUrl (const OnlineDrumLibrary& library) const;
 
 private:
@@ -41,5 +42,5 @@ private:
 
     void loadBundledManifest();
     void downloadManifestAsync (ManifestCallback callback);
-    void patchDemoDownloadUrl();
+    void removeRetiredLibraries();
 };

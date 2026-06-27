@@ -1,12 +1,11 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "OnlineLibraryBrowserPanel.h"
 #include "InstalledLibrariesPanel.h"
 
 class KitForgeAudioProcessor;
 
-/** Tab 2 — online SFZ catalog + installed libraries. */
+/** Installed `.kitforge` kits browser (native fallback UI). */
 class LibraryBrowserPanel final : public juce::Component
 {
 public:
@@ -18,6 +17,5 @@ public:
     std::function<void()> onKitInstalled;
 
 private:
-    OnlineLibraryBrowserPanel onlinePanel;
     InstalledLibrariesPanel installedPanel;
 };

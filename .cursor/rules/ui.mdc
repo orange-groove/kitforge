@@ -1,0 +1,19 @@
+---
+description: React/Chakra/Cutoff UI conventions
+globs: ui/**/*.ts,ui/**/*.tsx
+alwaysApply: false
+---
+
+# UI
+
+Use Chakra UI for layout, tabs, drawer, menu, modal, form controls, and theme.
+
+Use Cutoff Audio UI for audio controls: knobs, sliders, meters, audio parameter controls.
+
+- Never use Chakra `Slider` for plugin parameters unless Cutoff cannot do it.
+- Wrap Cutoff controls in shared components — `AudioKnob`, `AudioSlider`, `AudioMeter` — never scatter raw Cutoff controls throughout the project.
+
+## State
+
+- React is never the source of truth; render from kit state pushed by C++ and request changes via the bridge.
+- Keep business logic out of React components.

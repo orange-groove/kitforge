@@ -1,6 +1,5 @@
 #include "DrumLibraryCatalogService.h"
 #include "../Core/KitForgePaths.h"
-#include "../Core/DemoKitFactory.h"
 
 #if __has_include ("KitForgeResources.h")
  #include "KitForgeResources.h"
@@ -15,6 +14,21 @@ namespace
     {
         return KitForgePaths::getCatalogCacheRoot().getChildFile ("drum-catalog-manifest.json");
     }
+
+    juce::String knownDownloadUrlForLibrary (const juce::String& libraryId)
+    {
+        struct KnownUrl { const char* id; const char* url; };
+        static constexpr KnownUrl kKnown[] =
+        {
+            { "salamander-drumkit", "https://archive.org/download/SalamanderDrumkit/salamanderDrumkit.tar.bz2" },
+        };
+
+        for (const auto& entry : kKnown)
+            if (libraryId == entry.id)
+                return entry.url;
+
+        return {};
+    }
 }
 
 DrumLibraryCatalogService::DrumLibraryCatalogService()
@@ -24,7 +38,7 @@ DrumLibraryCatalogService::DrumLibraryCatalogService()
     if (! loadCachedManifestFromDisk())
         loadBundledManifest();
 
-    patchDemoDownloadUrl();
+    removeRetiredLibraries();
 }
 
 const OnlineDrumLibrary* DrumLibraryCatalogService::findLibraryById (const juce::String& libraryId) const
@@ -43,7 +57,7 @@ void DrumLibraryCatalogService::refreshManifest (ManifestCallback callback)
         if (success)
         {
             cachedManifest = manifest;
-            patchDemoDownloadUrl();
+            removeRetiredLibraries();
             saveCachedManifestToDisk();
         }
         else
@@ -51,7 +65,7 @@ void DrumLibraryCatalogService::refreshManifest (ManifestCallback callback)
             if (! loadCachedManifestFromDisk())
                 loadBundledManifest();
 
-            patchDemoDownloadUrl();
+            removeRetiredLibraries();
         }
 
         if (callback)
@@ -66,11 +80,12 @@ void DrumLibraryCatalogService::loadBundledManifest()
                              (size_t) KitForgeResources::catalog_manifest_jsonSize);
     juce::var parsed;
 
-    if (juce::JSON::parse (json, parsed).wasOk())
-    {
-        cachedManifest = DrumLibraryCatalogManifest::fromVar (parsed);
-        return;
-    }
+        if (juce::JSON::parse (json, parsed).wasOk())
+        {
+            cachedManifest = DrumLibraryCatalogManifest::fromVar (parsed);
+            removeRetiredLibraries();
+            return;
+        }
 #endif
 
     const auto file = juce::File::getCurrentWorkingDirectory()
@@ -84,6 +99,7 @@ void DrumLibraryCatalogService::loadBundledManifest()
         if (juce::JSON::parse (file.loadFileAsString(), parsed).wasOk())
         {
             cachedManifest = DrumLibraryCatalogManifest::fromVar (parsed);
+            removeRetiredLibraries();
             return;
         }
     }
@@ -140,32 +156,21 @@ void DrumLibraryCatalogService::downloadManifestAsync (ManifestCallback callback
     });
 }
 
-void DrumLibraryCatalogService::patchDemoDownloadUrl()
+void DrumLibraryCatalogService::removeRetiredLibraries()
 {
-    const auto demoUrl = DemoKitFactory::getDemoPackDownloadUrl();
-
-    if (demoUrl.isEmpty())
-        return;
-
-    for (int i = 0; i < cachedManifest.libraries.size(); ++i)
+    for (int i = cachedManifest.libraries.size(); --i >= 0;)
     {
         if (cachedManifest.libraries.getReference (i).id == "demo-rock-kit")
-        {
-            cachedManifest.libraries.getReference (i).downloadUrl = demoUrl;
-            return;
-        }
+            cachedManifest.libraries.remove (i);
     }
 }
 
 juce::String DrumLibraryCatalogService::resolveDownloadUrl (const OnlineDrumLibrary& library) const
 {
-    if (library.downloadUrl.isNotEmpty())
-        return library.downloadUrl;
+    if (const auto known = knownDownloadUrlForLibrary (library.id); known.isNotEmpty())
+        return known;
 
-    if (library.id == "demo-rock-kit")
-        return DemoKitFactory::getDemoPackDownloadUrl();
-
-    return {};
+    return library.downloadUrl;
 }
 
 juce::Array<OnlineDrumLibrary> DrumLibraryCatalogService::search (const juce::String& query) const
@@ -218,6 +223,7 @@ bool DrumLibraryCatalogService::loadCachedManifestFromDisk()
         return false;
 
     cachedManifest = DrumLibraryCatalogManifest::fromVar (parsed);
+    removeRetiredLibraries();
     return cachedManifest.libraries.size() > 0;
 }
 
@@ -230,8 +236,20 @@ bool DrumLibraryCatalogService::saveCachedManifestToDisk() const
 bool DrumLibraryCatalogService::isLibraryInstalled (const juce::String& libraryId) const
 {
     const auto root = KitForgePaths::getLibraryInstallPath (libraryId);
-    return root.getChildFile ("install.json").existsAsFile()
-        || root.getChildFile ("kitforge").getChildFile ("kit.json").existsAsFile();
+
+    if (root.getChildFile ("kitforge").getChildFile ("kit.json").existsAsFile())
+        return true;
+
+    return root.getChildFile ("kit.json").existsAsFile();
+}
+
+bool DrumLibraryCatalogService::isPartialInstall (const juce::String& libraryId) const
+{
+    if (isLibraryInstalled (libraryId))
+        return false;
+
+    const auto root = KitForgePaths::getLibraryInstallPath (libraryId);
+    return root.getChildFile ("source").isDirectory();
 }
 
 InstalledLibrary DrumLibraryCatalogService::getInstalledLibrary (const juce::String& libraryId) const

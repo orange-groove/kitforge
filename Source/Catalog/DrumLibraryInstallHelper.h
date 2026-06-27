@@ -17,6 +17,9 @@ public:
         InstalledLibrary library;
     };
 
+    /** Rewrites sample paths relative to kitForgeDir (e.g. ../source/kick.wav). */
+    static void anchorKitSamplePaths (KitModel& kit, const juce::File& kitForgeDir);
+
     static juce::File getLibraryRoot (const juce::String& libraryId)
     {
         return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
@@ -48,6 +51,9 @@ public:
 
         if (sfzFileUsed.existsAsFile())
             options.creditsText += "SFZ file: " + sfzFileUsed.getFileName() + "\n";
+
+        anchorKitSamplePaths (importResult.kit, kitForgeDir);
+        options.referenceSamplesInPlace = true;
 
         const auto writeResult = writer.writeFolder (importResult.kit, kitForgeDir, options);
 

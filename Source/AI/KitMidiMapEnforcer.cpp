@@ -180,7 +180,7 @@ namespace
                 break;
 
             case DrumPieceType::ride:
-                setArticulations (piece, { { "Bow", 51 }, { "Bell", 53 }, { "Edge", 59 } });
+                setArticulations (piece, { { "Edge", 51 }, { "Bell", 53 } });
                 break;
 
             case DrumPieceType::splash:

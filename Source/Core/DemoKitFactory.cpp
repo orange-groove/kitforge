@@ -1,124 +1,32 @@
 #include "DemoKitFactory.h"
 #include "DemoKitSampleBindings.h"
 #include "../Models/KitModel.h"
-#include "../Serialization/KitSerializer.h"
+#include "../Serialization/KitForgePackageWriter.h"
+#include "../Serialization/KitForgePackageReader.h"
 
 namespace
 {
-    constexpr const char* kDemoPackVersion = "3.0.2";
+    constexpr const char* kDemoPackageId = "demo-rock-kit";
+    constexpr const char* kDemoPackVersion = "1.0.0";
 
-    bool zipFolder (const juce::File& sourceFolder, const juce::File& zipFile)
-    {
-        juce::ZipFile::Builder builder;
-
-        for (const auto& file : sourceFolder.findChildFiles (juce::File::findFiles, true))
-        {
-            const auto relativePath = file.getRelativePathFrom (sourceFolder);
-            builder.addFile (file, 9, relativePath);
-        }
-
-        if (zipFile.existsAsFile())
-            zipFile.deleteFile();
-
-        juce::FileOutputStream stream (zipFile);
-
-        if (stream.failedToOpen())
-            return false;
-
-        return builder.writeToStream (stream, nullptr);
-    }
-
-    bool packIsCurrentVersion (const juce::File& packFile)
-    {
-        juce::ZipFile zip (packFile);
-        const int versionIdx = zip.getIndexOfFileName ("demo-pack-version.txt");
-
-        if (versionIdx < 0)
-            return false;
-
-        if (auto versionStream = std::unique_ptr<juce::InputStream> (zip.createStreamForEntry (versionIdx)))
-        {
-            if (versionStream->readString().trim() != kDemoPackVersion)
-                return false;
-        }
-        else
-        {
-            return false;
-        }
-
-        const int kitIdx = zip.getIndexOfFileName ("kit.json");
-
-        if (kitIdx < 0)
-            return false;
-
-        if (auto kitStream = std::unique_ptr<juce::InputStream> (zip.createStreamForEntry (kitIdx)))
-        {
-            juce::var parsed;
-
-            if (juce::JSON::parse (kitStream->readString(), parsed).failed())
-                return false;
-
-            KitModel kit;
-            KitSerializer::kitFromVar (kit, parsed);
-            return DemoKitSampleBindings::kitHasAssignedSamples (kit);
-        }
-
-        return false;
-    }
-
-    bool extractPackToFolder (const juce::File& packFile, const juce::File& destination, juce::String& error)
-    {
-        if (! packFile.existsAsFile())
-        {
-            error = "Pack file not found.";
-            return false;
-        }
-
-        if (destination.exists())
-            destination.deleteRecursively();
-
-        destination.createDirectory();
-
-        juce::ZipFile zip (packFile);
-        const auto result = zip.uncompressTo (destination, true);
-
-        if (result.failed())
-        {
-            error = result.getErrorMessage();
-            return false;
-        }
-
-        return true;
-    }
-
-    bool installedKitNeedsRepair (const juce::File& installPath)
+    bool installedKitIsValid (const juce::File& installPath)
     {
         if (! installPath.isDirectory())
             return false;
 
-        const auto version = installPath.getChildFile (".kitforge-version").loadFileAsString().trim();
-
-        if (version != kDemoPackVersion)
-            return true;
-
+        const auto manifestFile = installPath.getChildFile ("manifest.json");
         const auto kitJson = installPath.getChildFile ("kit.json");
 
-        if (! kitJson.existsAsFile())
-            return true;
+        if (! manifestFile.existsAsFile() || ! kitJson.existsAsFile())
+            return false;
 
-        juce::var parsed;
+        const auto loaded = KitForgePackageReader::loadInstalledKit (installPath);
 
-        if (juce::JSON::parse (kitJson.loadFileAsString(), parsed).failed())
-            return true;
+        if (! loaded.success)
+            return false;
 
-        KitModel kit;
-        KitSerializer::kitFromVar (kit, parsed);
-
-        if (! DemoKitSampleBindings::kitHasAssignedSamples (kit))
-            return true;
-
+        auto kit = loaded.kit;
         kit.resolveSamplePaths (installPath);
-        DemoKitSampleBindings::bindSamplePathsFromFolder (kit, installPath);
 
         for (const auto& piece : kit.getPieces())
         {
@@ -129,46 +37,13 @@ namespace
                     for (const auto& sample : layer.roundRobins.samples)
                     {
                         if (sample.filePath.isNotEmpty() && juce::File (sample.filePath).existsAsFile())
-                            return false;
+                            return true;
                     }
                 }
             }
         }
 
-        return true;
-    }
-
-    bool repairDemoInstallInPlace (const juce::File& installPath)
-    {
-        const auto kitJson = installPath.getChildFile ("kit.json");
-
-        if (! kitJson.existsAsFile())
-            return false;
-
-        const auto samplesDir = installPath.getChildFile ("samples");
-
-        if (! samplesDir.isDirectory()
-            || samplesDir.findChildFiles (juce::File::findFiles, false, "*.wav").isEmpty())
-            return false;
-
-        juce::var parsed;
-
-        if (juce::JSON::parse (kitJson.loadFileAsString(), parsed).failed())
-            return false;
-
-        KitModel model;
-        KitSerializer::kitFromVar (model, parsed);
-        DemoKitSampleBindings::bindSamplePathsFromFolder (model, installPath);
-        model.resolveSamplePaths (installPath);
-
-        if (! DemoKitSampleBindings::kitHasAssignedSamples (model))
-            return false;
-
-        if (! KitSerializer::saveKitToFile (model, kitJson))
-            return false;
-
-        installPath.getChildFile (".kitforge-version").replaceWithText (kDemoPackVersion);
-        return true;
+        return false;
     }
 }
 
@@ -176,22 +51,18 @@ juce::File DemoKitFactory::ensureDemoPackExists()
 {
     KitForgePaths::ensureDirectoryStructure();
 
-    const auto packFile = KitForgePaths::getPackCacheRoot().getChildFile ("demo-rock-kit.kitforgepack");
-
-    if (packFile.existsAsFile() && packIsCurrentVersion (packFile))
-        return packFile;
+    const auto packFile = KitForgePaths::getPackCacheRoot().getChildFile ("demo-rock-kit.kitforge");
 
     if (packFile.existsAsFile())
-        packFile.deleteFile();
-
-    const auto staging = packFile.getSiblingFile ("demo-rock-kit_staging");
-    staging.deleteRecursively();
-    staging.createDirectory();
-    staging.getChildFile ("artwork").createDirectory();
+        return packFile;
 
     KitModel model;
     model.kitName = "Demo Rock Kit";
     model.createDefaultKit (800.0f, 600.0f);
+
+    const auto staging = packFile.getSiblingFile ("demo-rock-kit_staging");
+    staging.deleteRecursively();
+    staging.createDirectory();
 
     if (! DemoKitSampleBindings::writeBundledSamplesToFolder (staging))
     {
@@ -201,23 +72,29 @@ juce::File DemoKitFactory::ensureDemoPackExists()
 
     DemoKitSampleBindings::bindSamplePathsFromFolder (model, staging);
 
-    KitSerializer::saveKitToFile (model, staging.getChildFile ("kit.json"));
-    staging.getChildFile ("demo-pack-version.txt").replaceWithText (kDemoPackVersion);
-    staging.getChildFile ("license.txt").replaceWithText (
-        "Demo Rock Kit for KitForge offline catalog testing.\n"
-        "Sample licenses vary (CC0 / CC BY). See credits.txt.\n");
-    staging.getChildFile ("credits.txt").replaceWithText (
+    KitForgePackageWriter writer;
+    KitForgePackageWriter::WriteOptions options;
+    options.packageId = kDemoPackageId;
+    options.kitName = model.kitName;
+    options.version = kDemoPackVersion;
+    options.author = "KitForge";
+    options.licenseType = "custom";
+    options.licenseText =
+        "Demo Rock Kit for KitForge.\n"
+        "Sample licenses vary (CC0 / CC BY). See credits.txt.\n";
+    options.creditsText =
         "Demo drum one-shots: fugue-state-audio distkit series.\n"
         "From stargate-sample-pack (CC0).\n"
-        "https://github.com/stargatedaw/stargate-sample-pack\n");
+        "https://github.com/stargatedaw/stargate-sample-pack\n";
+    options.tags = { "demo", "rock", "acoustic" };
+    options.generatePlaceholderLicense = false;
 
-    if (! zipFolder (staging, packFile))
-    {
-        staging.deleteRecursively();
-        return {};
-    }
-
+    const auto writeResult = writer.writePackage (model, packFile, options);
     staging.deleteRecursively();
+
+    if (! writeResult.success)
+        return {};
+
     return packFile;
 }
 
@@ -233,23 +110,17 @@ juce::String DemoKitFactory::getDemoPackDownloadUrl()
 
 bool DemoKitFactory::repairInstalledDemoKitIfNeeded()
 {
-    const auto installPath = KitForgePaths::getLibraryInstallPath ("demo-rock-kit");
+    const auto installPath = KitForgePaths::getKitInstallPath (kDemoPackageId);
 
-    if (! installedKitNeedsRepair (installPath))
+    if (installedKitIsValid (installPath))
         return false;
 
     const auto packFile = ensureDemoPackExists();
 
-    if (packFile.existsAsFile())
-    {
-        juce::String error;
+    if (! packFile.existsAsFile())
+        return false;
 
-        if (extractPackToFolder (packFile, installPath, error))
-        {
-            installPath.getChildFile (".kitforge-version").replaceWithText (kDemoPackVersion);
-            return true;
-        }
-    }
-
-    return repairDemoInstallInPlace (installPath);
+    KitForgePackageReader reader;
+    const auto installResult = reader.installPackageFile (packFile);
+    return installResult.success;
 }

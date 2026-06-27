@@ -22,7 +22,17 @@
       "description": "Fast dev builds — Standalone, no plugin install",
       "inherits": "ninja-base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "KITFORGE_BUILD_UI": "ON"
+      }
+    },
+    {
+      "name": "ninja-debug-devui",
+      "displayName": "Ninja Debug + Vite dev server",
+      "inherits": "ninja-debug",
+      "cacheVariables": {
+        "KITFORGE_USE_DEV_SERVER": "ON",
+        "KITFORGE_BUILD_UI": "OFF"
       }
     },
     {
@@ -30,7 +40,8 @@
       "displayName": "Ninja Release",
       "inherits": "ninja-base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "KITFORGE_BUILD_UI": "ON"
       }
     }
   ],

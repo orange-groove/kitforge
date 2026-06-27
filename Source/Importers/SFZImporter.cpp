@@ -1,9 +1,29 @@
 #include "SFZImporter.h"
 #include "KitModelBuilder.h"
+#include "KitImportLayoutEnforcer.h"
 #include "SampleNameParser.h"
+#include "SfzDrumMappingResolver.h"
+#include "LlmSampleClassifier.h"
+#include <functional>
 
 namespace
 {
+    juce::File resolveRelativeSamplePath (const juce::File& root, juce::String relativePath)
+    {
+        relativePath = relativePath.replaceCharacter ('\\', '/');
+        juce::File result = root;
+
+        for (const auto& part : juce::StringArray::fromTokens (relativePath, "/", ""))
+        {
+            if (part == "..")
+                result = result.getParentDirectory();
+            else if (part.isNotEmpty() && part != ".")
+                result = result.getChildFile (part);
+        }
+
+        return result;
+    }
+
     int readOpcodeInt (const juce::String& line, const juce::String& opcode, int fallback)
     {
         if (line.trimStart().startsWithIgnoreCase (opcode))
@@ -57,7 +77,15 @@ ImportResult SFZImporter::importFile (const SFZImportOptions& options) const
                           ? juce::File (options.sampleRootPath)
                           : sfzFile.getParentDirectory();
 
-    const auto regions = parseRegions (sfzFile.loadFileAsString());
+    const auto expandedSfz = expandSfzDocument (sfzFile);
+
+    if (expandedSfz.isEmpty())
+    {
+        result.errorMessage = "Could not read or expand SFZ file: " + options.sfzFilePath;
+        return result;
+    }
+
+    const auto regions = parseRegions (expandedSfz);
 
     if (regions.empty())
     {
@@ -89,10 +117,158 @@ ImportResult SFZImporter::importFile (const SFZImportOptions& options) const
         return result;
     }
 
+    // Prefer LLM grouping (robust to vendor naming); silently keeps the
+    // resolver-derived values when unavailable/offline/invalid.
+    LlmSampleClassifier::classify (result.kitName, samples);
+
     result.kit = KitModelBuilder::buildFromMetadata (result.kitName, samples, result.warnings);
+    applyImportKitLayout (result.kit, 980.0f, 680.0f);
     result.stats = ImportResult::computeStats (result.kit, wavCount);
     result.success = true;
     return result;
+}
+
+juce::String SFZImporter::stripInlineComment (const juce::String& line)
+{
+    return line.upToFirstOccurrenceOf ("//", false, false).trim();
+}
+
+void SFZImporter::applyDefineSubstitutions (juce::String& line,
+                                              const juce::HashMap<juce::String, juce::String>& defines) const
+{
+    for (auto it = defines.begin(); it != defines.end(); ++it)
+        line = line.replace (it.getKey(), it.getValue());
+}
+
+juce::String SFZImporter::expandSfzDocument (const juce::File& sfzFile) const
+{
+    if (! sfzFile.existsAsFile())
+        return {};
+
+    juce::HashMap<juce::String, juce::String> defines;
+    juce::StringArray visitedPaths;
+    juce::String output;
+
+    std::function<void(const juce::File&)> expandFile;
+
+    expandFile = [&] (const juce::File& file)
+    {
+        const auto canonical = file.getFullPathName();
+
+        if (visitedPaths.contains (canonical, true))
+            return;
+
+        visitedPaths.add (canonical);
+
+        if (! file.existsAsFile())
+            return;
+
+        const auto masterRoot = sfzFile.getParentDirectory();
+
+        for (const auto& line : juce::StringArray::fromLines (file.loadFileAsString()))
+        {
+            auto trimmed = stripInlineComment (line.trim());
+
+            if (trimmed.isEmpty())
+                continue;
+
+            if (trimmed.startsWithIgnoreCase ("#define"))
+            {
+                const auto body = trimmed.substring (7).trim();
+
+                if (body.isNotEmpty())
+                {
+                    const auto space = body.indexOfAnyOf (" \t");
+
+                    if (space > 0)
+                    {
+                        const auto name = body.substring (0, space).trim();
+                        const auto value = body.substring (space + 1).trim();
+                        defines.set (name, value);
+                    }
+                }
+
+                continue;
+            }
+
+            if (trimmed.startsWithIgnoreCase ("#include"))
+            {
+                const int q1 = trimmed.indexOfChar ('"');
+
+                if (q1 >= 0)
+                {
+                    const int q2 = trimmed.indexOfChar (q1 + 1, '"');
+
+                    if (q2 > q1)
+                    {
+                        const auto includePath = trimmed.substring (q1 + 1, q2);
+                        output << "// kitforge:map=" << includePath.replaceCharacter ('\\', '/') << "\n";
+                        expandFile (file.getSiblingFile (includePath));
+                    }
+                }
+
+                continue;
+            }
+
+            if (trimmed.startsWithChar ('#') && ! trimmed.startsWithChar ('<'))
+                continue;
+
+            auto expandedLine = trimmed;
+            applyDefineSubstitutions (expandedLine, defines);
+
+            if (expandedLine.trimStart().startsWithIgnoreCase ("sample"))
+            {
+                const auto samplePath = readOpcodeString (expandedLine, "sample");
+
+                if (samplePath.isNotEmpty())
+                {
+                    // Multi-file SFZ libraries (e.g. Sforzando) resolve sample paths from the
+                    // master instrument folder, not the included mapping file's folder.
+                    const auto absolute = resolveRelativeSamplePath (masterRoot, samplePath);
+                    auto relativeToMaster = absolute.getRelativePathFrom (masterRoot).replaceCharacter ('\\', '/');
+                    expandedLine = "sample=" + relativeToMaster;
+                }
+            }
+
+            output << expandedLine << "\n";
+        }
+    };
+
+    expandFile (sfzFile);
+    return output;
+}
+
+juce::String SFZImporter::stripSfzTagSuffix (const juce::String& line)
+{
+    const auto trimmed = line.trim();
+
+    if (! trimmed.startsWithChar ('<'))
+        return {};
+
+    const int close = trimmed.indexOfChar ('>');
+
+    if (close < 0)
+        return {};
+
+    return stripInlineComment (trimmed.substring (close + 1));
+}
+
+void SFZImporter::applyOpcodeTokens (const juce::String& line, SFZRegion& region) const
+{
+    const auto cleaned = stripInlineComment (line);
+
+    // Sample paths often contain spaces; never split sample= lines on whitespace.
+    if (cleaned.trimStart().startsWithIgnoreCase ("sample="))
+    {
+        applyOpcodeLine (cleaned, region);
+        return;
+    }
+
+    for (const auto& token : juce::StringArray::fromTokens (cleaned, " ", ""))
+    {
+        if (token.containsChar ('='))
+            applyOpcodeLine (token, region);
+    }
 }
 
 std::vector<SFZImporter::SFZRegion> SFZImporter::parseRegions (const juce::String& sfzText) const
@@ -101,19 +277,27 @@ std::vector<SFZImporter::SFZRegion> SFZImporter::parseRegions (const juce::Strin
     SFZRegion current;
     SFZRegion groupDefaults;
     SFZRegion masterDefaults;
+    juce::String currentMappingSource;
 
     enum class Block { none, master, group, region };
     Block block = Block::none;
 
     for (const auto& line : juce::StringArray::fromLines (sfzText))
     {
-        const auto trimmed = line.trim();
+        const auto trimmed = stripInlineComment (line.trim());
 
-        if (trimmed.startsWith ("<master>"))
+        if (trimmed.startsWith ("// kitforge:map="))
+        {
+            currentMappingSource = trimmed.fromFirstOccurrenceOf ("map=", false, false).trim();
+            continue;
+        }
+
+        if (trimmed.startsWith ("<master>") || trimmed.startsWith ("<global>"))
         {
             masterDefaults = SFZRegion();
             groupDefaults = SFZRegion();
             block = Block::master;
+            applyOpcodeTokens (stripSfzTagSuffix (trimmed), masterDefaults);
             continue;
         }
 
@@ -121,6 +305,7 @@ std::vector<SFZImporter::SFZRegion> SFZImporter::parseRegions (const juce::Strin
         {
             groupDefaults = masterDefaults;
             block = Block::group;
+            applyOpcodeTokens (stripSfzTagSuffix (trimmed), groupDefaults);
             continue;
         }
 
@@ -130,7 +315,9 @@ std::vector<SFZImporter::SFZRegion> SFZImporter::parseRegions (const juce::Strin
                 regions.push_back (current);
 
             current = groupDefaults;
+            current.mappingSource = currentMappingSource;
             block = Block::region;
+            applyOpcodeTokens (stripSfzTagSuffix (trimmed), current);
             continue;
         }
 
@@ -142,9 +329,9 @@ std::vector<SFZImporter::SFZRegion> SFZImporter::parseRegions (const juce::Strin
 
         switch (block)
         {
-            case Block::master: applyOpcodeLine (trimmed, masterDefaults); break;
-            case Block::group:  applyOpcodeLine (trimmed, groupDefaults); break;
-            case Block::region: applyOpcodeLine (trimmed, current); break;
+            case Block::master: applyOpcodeTokens (trimmed, masterDefaults); break;
+            case Block::group:  applyOpcodeTokens (trimmed, groupDefaults); break;
+            case Block::region: applyOpcodeTokens (trimmed, current); break;
             default: break;
         }
     }
@@ -201,7 +388,8 @@ DrumPieceType SFZImporter::inferTypeFromMidiNote (int midiNote)
         case 46: return DrumPieceType::hiHat;
         case 45:
         case 47:
-        case 48: return DrumPieceType::rackTom;
+        case 48:
+        case 50: return DrumPieceType::rackTom;
         case 49:
         case 57: return DrumPieceType::crash;
         case 51:
@@ -210,6 +398,34 @@ DrumPieceType SFZImporter::inferTypeFromMidiNote (int midiNote)
         case 52: return DrumPieceType::china;
         case 55: return DrumPieceType::splash;
         default: return DrumPieceType::accessory;
+    }
+}
+
+int SFZImporter::inferIndexFromMidiNote (int midiNote, DrumPieceType type)
+{
+    switch (type)
+    {
+        case DrumPieceType::kick:
+            return midiNote == 35 ? 1 : 0;
+
+        case DrumPieceType::rackTom:
+            switch (midiNote)
+            {
+                case 45: return 0;
+                case 47: return 1;
+                case 48: return 2;
+                case 50: return 3;
+                default: return 0;
+            }
+
+        case DrumPieceType::floorTom:
+            return midiNote == 41 ? 1 : 0;
+
+        case DrumPieceType::crash:
+            return midiNote == 57 ? 1 : 0;
+
+        default:
+            return 0;
     }
 }
 
@@ -255,7 +471,7 @@ SampleMetadata SFZImporter::regionToMetadata (const SFZRegion& region,
     const juce::File sampleRoot (options.sampleRootPath.isNotEmpty()
                                      ? options.sampleRootPath
                                      : juce::File (options.sfzFilePath).getParentDirectory().getFullPathName());
-    const juce::File sampleFile = sampleRoot.getChildFile (region.samplePath);
+    const juce::File sampleFile = resolveRelativeSamplePath (sampleRoot, region.samplePath);
     meta.filePath = sampleFile.getFullPathName();
 
     if (! sampleFile.existsAsFile())
@@ -276,12 +492,7 @@ SampleMetadata SFZImporter::regionToMetadata (const SFZRegion& region,
     if (midiNote < 0)
     {
         SampleNameParser parser;
-        const auto parsed = parser.parseFile (sampleFile);
-        midiNote = parsed.midiNote;
-        meta.instrumentType = parsed.instrumentType;
-        meta.articulation = parsed.articulation;
-        meta.instrumentIndex = parsed.instrumentIndex;
-        meta.confidence = parsed.confidence;
+        midiNote = parser.parseFile (sampleFile).midiNote;
     }
 
     if (midiNote < 0)
@@ -298,16 +509,23 @@ SampleMetadata SFZImporter::regionToMetadata (const SFZRegion& region,
     meta.maxVelocity = juce::jlimit (1, 127, region.hivel);
     meta.velocityValue = (meta.minVelocity + meta.maxVelocity) / 2;
 
-    if (meta.instrumentType == DrumPieceType::accessory)
-        meta.instrumentType = inferTypeFromMidiNote (midiNote);
+    auto hint = SfzDrumMappingResolver::fromMappingSource (region.mappingSource);
 
-    if (meta.articulation.isEmpty())
+    if (hint.confidence <= 0.0f)
+        hint = SfzDrumMappingResolver::fromSamplePath (sampleFile);
+
+    if (hint.confidence <= 0.0f)
     {
-        meta.articulation = inferArticulationFromSamplePath (meta.filePath);
-
-        if (meta.articulation.isEmpty())
-            meta.articulation = inferArticulationFromMidiNote (midiNote, meta.instrumentType);
+        hint.type = inferTypeFromMidiNote (midiNote);
+        hint.index = inferIndexFromMidiNote (midiNote, hint.type);
+        hint.articulation = inferArticulationFromMidiNote (midiNote, hint.type);
+        hint.confidence = 0.5f;
     }
+
+    meta.instrumentType = hint.type;
+    meta.instrumentIndex = hint.index;
+    meta.articulation = hint.articulation;
+    meta.confidence = hint.confidence;
 
     if (region.seqPosition > 0)
         meta.roundRobinIndex = region.seqPosition;
@@ -325,19 +543,6 @@ SampleMetadata SFZImporter::regionToMetadata (const SFZRegion& region,
                                     ? "hihat"
                                     : "cymbal_" + juce::String (region.group);
     }
-
-    if (meta.instrumentType == DrumPieceType::crash)
-        meta.instrumentIndex = midiNote == 57 ? 1 : 0;
-    else if (meta.instrumentType == DrumPieceType::rackTom)
-    {
-        if (midiNote == 47) meta.instrumentIndex = 1;
-        else if (midiNote == 45) meta.instrumentIndex = 2;
-    }
-    else if (meta.instrumentType == DrumPieceType::floorTom)
-        meta.instrumentIndex = midiNote == 41 ? 1 : 0;
-
-    if (meta.confidence <= 0.0f)
-        meta.confidence = 0.7f;
 
     meta.tags.add (drumPieceTypeToString (meta.instrumentType));
     meta.tags.add (meta.articulation.toLowerCase());

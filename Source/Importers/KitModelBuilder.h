@@ -4,7 +4,15 @@
 #include "../Models/SampleMetadata.h"
 #include "../Models/KitModel.h"
 
-/** Builds KitModel from parsed sample metadata (shared by loose WAV and SFZ importers). */
+/** Builds KitModel from parsed sample metadata (shared by loose WAV and SFZ importers).
+
+    Pieces are grouped generically (not per library):
+      - kick / snare / hi-hat collapse to a single piece, with articulations.
+      - toms / crashes / rides / china / splash separate by their file-name "stem"
+        so that different drums (Crash 13" vs 16") become distinct pieces while
+        articulations of one drum (ride Bow + Bell) merge onto it.
+      - rack vs floor toms are split by pitch when the names don't say "floor".
+*/
 class KitModelBuilder
 {
 public:
@@ -12,35 +20,8 @@ public:
                                        const std::vector<SampleMetadata>& samples,
                                        std::vector<ImportWarning>& warnings);
 
-private:
-    struct PieceKey
-    {
-        DrumPieceType type = DrumPieceType::accessory;
-        int index = 0;
-
-        bool operator== (const PieceKey& other) const
-        {
-            return type == other.type && index == other.index;
-        }
-    };
-
-    struct LayerKey
-    {
-        int minVelocity = 1;
-        int maxVelocity = 127;
-
-        bool operator== (const LayerKey& other) const
-        {
-            return minVelocity == other.minVelocity && maxVelocity == other.maxVelocity;
-        }
-    };
-
-    static juce::String pieceKeyToString (const PieceKey& key);
-    static juce::String pieceDisplayName (const PieceKey& key);
-    static juce::String articulationKey (const SampleMetadata& meta);
-    static void applyPieceDefaults (DrumPiece& piece, const PieceKey& key);
-    static void addSampleToModel (KitModel& model,
-                                  juce::HashMap<juce::String, DrumPiece*>& piecesByKey,
-                                  const SampleMetadata& meta,
-                                  std::vector<ImportWarning>& warnings);
+    /** Repairs a loaded kit whose articulations round-robin between several different
+        drum bodies (keeps only the dominant voice per articulation). Safe to run on
+        any kit; used on load so previously-imported kits get fixed without re-import. */
+    static void pruneMixedVoices (KitModel& model);
 };

@@ -52,7 +52,10 @@ KitForgePackWriter::WriteResult KitForgePackWriter::writeFolder (const KitModel&
 
     outputFolder.createDirectory();
     const auto samplesDir = outputFolder.getChildFile ("samples");
-    samplesDir.createDirectory();
+
+    if (! options.referenceSamplesInPlace)
+        samplesDir.createDirectory();
+
     outputFolder.getChildFile ("artwork").createDirectory();
 
     KitModel kitCopy;
@@ -78,6 +81,9 @@ KitForgePackWriter::WriteResult KitForgePackWriter::writeFolder (const KitModel&
             {
                 for (auto& sample : layer.roundRobins.samples)
                 {
+                    if (options.referenceSamplesInPlace)
+                        continue;
+
                     const juce::File sourceFile (sample.filePath);
 
                     if (! sourceFile.existsAsFile())

@@ -19,13 +19,18 @@ public:
 
     void prepare (double sampleRate, int samplesPerBlock);
     void rebuildFromModel (const KitModel& model);
+    void collectReferencedPaths (const KitModel& model, juce::StringArray& paths) const;
+    void preloadSamples (const juce::StringArray& paths);
+    void syncFromModel (const KitModel& model, const juce::StringArray& referencedPaths);
 
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi,
                        const KitModel& model, int startSample, int numSamples);
 
     void triggerMidiNote (const KitModel& model, int midiNote, float velocity);
     void triggerPiece (const juce::String& pieceId, float velocity);
+    void triggerArticulation (const juce::String& pieceId, const juce::String& articulationId, float velocity);
     void queueTriggerPiece (const juce::String& pieceId, float velocity);
+    void queueTriggerArticulation (const juce::String& pieceId, const juce::String& articulationId, float velocity);
 
     SampleLoader& getSampleLoader() { return sampleLoader; }
 
@@ -41,6 +46,7 @@ private:
         int midiNote = 0;
         float velocity = 127.0f;
         juce::String pieceId;
+        juce::String articulationId;
         bool usePieceId = false;
     };
 
@@ -52,14 +58,15 @@ private:
     std::unordered_map<std::string, int> roundRobinIndices;
     double hostSampleRate = 44100.0;
 
-    juce::AbstractFifo pendingFifo { 128 };
-    std::array<PendingTrigger, 128> pendingTriggers {};
+    juce::CriticalSection triggerLock;
+    std::vector<PendingTrigger> pendingTriggers;
 
     void buildMidiMap (const KitModel& model);
-    void collectReferencedPaths (const KitModel& model, juce::StringArray& paths) const;
     void processPendingTriggers (const KitModel& model);
     void triggerPiece (const KitModel& model, const juce::String& pieceId, float velocity);
-    void triggerArticulation (const DrumPiece& piece, const Articulation& art, float velocity);
+    void triggerPieceArticulation (const KitModel& model, const juce::String& pieceId,
+                                   const juce::String& articulationId, float velocity);
+    void playArticulation (const DrumPiece& piece, const Articulation& art, float velocity);
 
     DrumVoice* allocateVoice();
     void releaseFinishedVoices();

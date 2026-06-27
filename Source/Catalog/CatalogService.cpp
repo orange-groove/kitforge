@@ -176,33 +176,11 @@ void CatalogService::downloadManifestAsync (ManifestCallback callback)
 
 void CatalogService::ensureDemoCatalogEntry()
 {
-    const auto demoUrl = DemoKitFactory::getDemoPackDownloadUrl();
-
-    if (demoUrl.isEmpty())
-        return;
-
-    for (int i = 0; i < cachedManifest.kits.size(); ++i)
+    for (int i = cachedManifest.kits.size(); --i >= 0;)
     {
         if (cachedManifest.kits.getReference (i).id == "demo-rock-kit")
-        {
-            auto& entry = cachedManifest.kits.getReference (i);
-            entry.downloadUrl = demoUrl;
-            entry.version = "3.0.2";
-            entry.sizeMb = 0.9;
-            return;
-        }
+            cachedManifest.kits.remove (i);
     }
-
-    CatalogKitEntry demo;
-    demo.id = "demo-rock-kit";
-    demo.name = "Demo Rock Kit (Offline)";
-    demo.format = "kitforgepack";
-    demo.sizeMb = 0.9;
-    demo.downloadUrl = demoUrl;
-    demo.description = "Local demo pack with real drum one-shots for offline testing.";
-    demo.version = "3.0.2";
-    demo.tags = { "demo", "rock", "offline" };
-    cachedManifest.kits.insert (0, demo);
 }
 
 juce::Array<CatalogKitEntry> CatalogService::search (const juce::String& query) const

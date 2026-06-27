@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -15,20 +16,20 @@ struct DownloadProgress
     juce::File outputPath;
 };
 
-/** Async HTTP/file downloads and zip archive handling. */
-class DownloadManager final : public juce::URL::DownloadTaskListener
+/** Async HTTP/file downloads and archive extraction. */
+class DownloadManager
 {
 public:
     using ProgressCallback = std::function<void(const DownloadProgress&)>;
 
     DownloadManager();
-    ~DownloadManager() override;
+    ~DownloadManager();
 
     void downloadFileAsync (const juce::String& url,
                             const juce::File& destination,
                             ProgressCallback onProgress);
 
-    /** Extract a .zip / .kitforgepack archive into destination (overwrites). */
+    /** Extract a downloaded archive (.zip, .tar.bz2, .tar.gz) into destination. */
     bool extractArchive (const juce::File& archive, const juce::File& destination, juce::String& error);
 
     /** Zip a folder to archive path (.kitforgepack or .zip). */
@@ -37,14 +38,15 @@ public:
     void cancelAll();
 
 private:
-    juce::CriticalSection lock;
-    std::unique_ptr<juce::URL::DownloadTask> activeTask;
-    ProgressCallback progressCallback;
-    DownloadProgress currentProgress;
+    class DownloadWorker;
 
-    void finished (juce::URL::DownloadTask* task, bool success) override;
-    void progress (juce::URL::DownloadTask* task, int64 bytesDownloaded, int64 totalLength) override;
+    juce::CriticalSection lock;
+    std::unique_ptr<DownloadWorker> activeWorker;
+    ProgressCallback progressCallback;
+    std::atomic<bool> cancelRequested { false };
 
     void notifyProgress (const DownloadProgress& update);
     static juce::File normaliseUrlToFile (const juce::String& url);
+    static bool extractZipArchive (const juce::File& archive, const juce::File& destination, juce::String& error);
+    static bool extractTarArchive (const juce::File& archive, const juce::File& destination, juce::String& error, bool gzip);
 };

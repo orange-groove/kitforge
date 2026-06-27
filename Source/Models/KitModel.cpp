@@ -14,6 +14,216 @@ namespace
         art.chokeGroupId = chokeGroupId;
         return art;
     }
+
+    const Articulation* findBestRideEdgeSource (const DrumPiece& piece)
+    {
+        const Articulation* best = nullptr;
+        int bestScore = -1;
+
+        for (const auto& art : piece.articulations)
+        {
+            const bool nameMatch = art.name.equalsIgnoreCase ("Edge")
+                || art.name.equalsIgnoreCase ("Bow")
+                || art.name.equalsIgnoreCase ("Ride");
+
+            if (! nameMatch)
+                continue;
+
+            int score = 0;
+
+            if (! art.layers.empty())
+                score += 100;
+
+            if (art.midiNote == 51)
+                score += 10;
+
+            if (art.name.equalsIgnoreCase ("Edge"))
+                score += 5;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = &art;
+            }
+        }
+
+        return best;
+    }
+
+    const Articulation* findBestRideBellSource (const DrumPiece& piece)
+    {
+        const Articulation* best = nullptr;
+        int bestScore = -1;
+
+        for (const auto& art : piece.articulations)
+        {
+            if (! art.name.equalsIgnoreCase ("Bell"))
+                continue;
+
+            int score = 0;
+
+            if (! art.layers.empty())
+                score += 100;
+
+            if (art.midiNote == 53)
+                score += 10;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = &art;
+            }
+        }
+
+        return best;
+    }
+
+    void copyLayersIfEmpty (Articulation& target, const Articulation& source)
+    {
+        if (target.layers.empty() && ! source.layers.empty())
+            target.layers = source.layers;
+
+        if (target.id.isEmpty() && source.id.isNotEmpty())
+            target.id = source.id;
+    }
+
+    bool isBellSamplePath (const juce::String& path)
+    {
+        return path.toLowerCase().contains ("bell");
+    }
+
+    bool isRideBowSamplePath (const juce::String& path)
+    {
+        const auto lower = path.toLowerCase();
+        return lower.contains ("ride") && ! lower.contains ("bell");
+    }
+
+    void appendSampleToArticulation (Articulation& articulation,
+                                     const SampleLayer& layer,
+                                     const DrumSample& sample)
+    {
+        SampleLayer* targetLayer = nullptr;
+
+        for (auto& existing : articulation.layers)
+        {
+            if (existing.minVelocity == layer.minVelocity && existing.maxVelocity == layer.maxVelocity)
+            {
+                targetLayer = &existing;
+                break;
+            }
+        }
+
+        if (targetLayer == nullptr)
+        {
+            SampleLayer copy;
+            copy.id = SampleLayer::makeId();
+            copy.minVelocity = layer.minVelocity;
+            copy.maxVelocity = layer.maxVelocity;
+            articulation.layers.push_back (std::move (copy));
+            targetLayer = &articulation.layers.back();
+        }
+
+        DrumSample copy = sample;
+
+        if (copy.id.isEmpty())
+            copy.id = DrumSample::makeId();
+
+        targetLayer->roundRobins.addSample (std::move (copy));
+    }
+
+    juce::File resolvePathFromRoot (const juce::File& root, juce::String relativePath)
+    {
+        relativePath = relativePath.replaceCharacter ('\\', '/');
+
+        if (relativePath.startsWithChar ('/'))
+            return juce::File (relativePath);
+
+        juce::File result = root;
+
+        for (const auto& part : juce::StringArray::fromTokens (relativePath, "/", ""))
+        {
+            if (part == "..")
+                result = result.getParentDirectory();
+            else if (part.isNotEmpty() && part != ".")
+                result = result.getChildFile (part);
+        }
+
+        return result;
+    }
+}
+
+void ensureStandardArticulations (DrumPiece& piece)
+{
+    if (piece.type != DrumPieceType::ride)
+        return;
+
+    Articulation edge;
+    Articulation bell;
+    edge.name = "Edge";
+    edge.midiNote = 51;
+    bell.name = "Bell";
+    bell.midiNote = 53;
+
+    for (const auto& art : piece.articulations)
+    {
+        for (const auto& layer : art.layers)
+        {
+            for (const auto& sample : layer.roundRobins.samples)
+            {
+                if (isBellSamplePath (sample.filePath))
+                    appendSampleToArticulation (bell, layer, sample);
+                else if (isRideBowSamplePath (sample.filePath))
+                    appendSampleToArticulation (edge, layer, sample);
+                else if (art.name.equalsIgnoreCase ("Bell"))
+                    appendSampleToArticulation (bell, layer, sample);
+                else if (art.name.equalsIgnoreCase ("Bow")
+                      || art.name.equalsIgnoreCase ("Edge")
+                      || art.name.equalsIgnoreCase ("Ride"))
+                    appendSampleToArticulation (edge, layer, sample);
+            }
+        }
+
+        if (art.name.equalsIgnoreCase ("Edge") && edge.id.isEmpty())
+            edge.id = art.id;
+
+        if (art.name.equalsIgnoreCase ("Bell") && bell.id.isEmpty())
+            bell.id = art.id;
+
+        if ((art.name.equalsIgnoreCase ("Bow")
+          || art.name.equalsIgnoreCase ("Ride"))
+            && edge.id.isEmpty())
+            edge.id = art.id;
+
+        if (art.midiNote == 51 && edge.id.isEmpty())
+            edge.id = art.id;
+
+        if (art.midiNote == 53 && bell.id.isEmpty())
+            bell.id = art.id;
+    }
+
+    if (edge.layers.empty())
+    {
+        if (const auto* src = findBestRideEdgeSource (piece))
+            copyLayersIfEmpty (edge, *src);
+    }
+
+    if (bell.layers.empty())
+    {
+        if (const auto* src = findBestRideBellSource (piece))
+            copyLayersIfEmpty (bell, *src);
+    }
+
+    if (edge.id.isEmpty())
+        edge.id = Articulation::makeId();
+
+    if (bell.id.isEmpty())
+        bell.id = Articulation::makeId();
+
+    piece.articulations.clear();
+    piece.articulations.push_back (std::move (edge));
+    piece.articulations.push_back (std::move (bell));
+    piece.primaryMidiNote = 51;
+    piece.syncMidiNotesFromArticulations();
 }
 
 KitModel::KitModel()
@@ -150,7 +360,10 @@ DrumPiece& KitModel::addDefaultCymbal (DrumPieceType type, float canvasWidth, fl
     }
     else if (type == DrumPieceType::ride)
     {
-        piece.addArticulation (makeArticulation ("Bow", piece.primaryMidiNote));
+        piece.addArticulation (makeArticulation ("Edge", 51));
+        piece.addArticulation (makeArticulation ("Bell", 53));
+        piece.primaryMidiNote = 51;
+        piece.syncMidiNotesFromArticulations();
     }
     else
     {
@@ -199,7 +412,10 @@ void KitModel::importContents (const KitModel& source)
     pieces = source.pieces;
 
     for (auto& piece : pieces)
+    {
         normalizePieceVisuals (piece);
+        ensureStandardArticulations (piece);
+    }
 
     notifyChanged();
 }
@@ -217,12 +433,22 @@ void KitModel::resolveSamplePaths (const juce::File& kitRoot)
                     if (sample.filePath.isEmpty())
                         continue;
 
-                    juce::File file (sample.filePath);
+                    const auto normalized = sample.filePath.replaceCharacter ('\\', '/');
+                    juce::File file (normalized);
+
+                    if (normalized.startsWithChar ('/') && file.existsAsFile())
+                    {
+                        sample.filePath = file.getFullPathName();
+                        continue;
+                    }
 
                     if (file.existsAsFile())
+                    {
+                        sample.filePath = file.getFullPathName();
                         continue;
+                    }
 
-                    auto resolved = kitRoot.getChildFile (sample.filePath);
+                    auto resolved = resolvePathFromRoot (kitRoot, normalized);
 
                     if (resolved.existsAsFile())
                     {
@@ -230,7 +456,15 @@ void KitModel::resolveSamplePaths (const juce::File& kitRoot)
                         continue;
                     }
 
-                    resolved = kitRoot.getChildFile ("samples").getChildFile (file.getFileName());
+                    resolved = kitRoot.getChildFile ("samples").getChildFile (juce::File (normalized).getFileName());
+
+                    if (resolved.existsAsFile())
+                    {
+                        sample.filePath = resolved.getFullPathName();
+                        continue;
+                    }
+
+                    resolved = kitRoot.getParentDirectory().getChildFile ("source").getChildFile (normalized);
 
                     if (resolved.existsAsFile())
                         sample.filePath = resolved.getFullPathName();
@@ -238,6 +472,12 @@ void KitModel::resolveSamplePaths (const juce::File& kitRoot)
             }
         }
     }
+}
+
+void KitModel::normalizeStandardArticulations()
+{
+    for (auto& piece : pieces)
+        ensureStandardArticulations (piece);
 }
 
 void KitModel::createDefaultKit (float canvasWidth, float canvasHeight)
@@ -265,7 +505,7 @@ void KitModel::createDefaultKit (float canvasWidth, float canvasHeight)
         { "Floor Tom",  DrumPieceType::floorTom, 0.62f, 0.58f,  96.0f,  96.0f, { { "Hit", 43 } }, {} },
         { "Hi-Hat",     DrumPieceType::hiHat,    0.28f, 0.30f,  68.0f,  68.0f, { { "Closed", 42 }, { "Open", 46 } }, "hat" },
         { "Crash",      DrumPieceType::crash,    0.18f, 0.18f, 104.0f, 104.0f, { { "Hit", 49 } }, {} },
-        { "Ride",       DrumPieceType::ride,     0.72f, 0.22f, 110.0f, 110.0f, { { "Bow", 51 } }, {} },
+        { "Ride",       DrumPieceType::ride,     0.72f, 0.22f, 110.0f, 110.0f, { { "Edge", 51 }, { "Bell", 53 } }, {} },
     };
 
     for (const auto& def : defaults)
@@ -326,21 +566,23 @@ bool KitModel::isMidiNoteInUse (int note, const juce::String& ignorePieceId) con
     return false;
 }
 
-void KitModel::assignSingleSample (DrumPiece& piece, const juce::File& file, const juce::String& articulationName)
+void KitModel::assignSingleSample (DrumPiece& piece, const juce::File& file, const juce::String& targetArticulationId)
 {
-    Articulation* art = piece.getPrimaryArticulation();
+    Articulation* art = nullptr;
+
+    if (targetArticulationId.isNotEmpty())
+        art = piece.findArticulationById (targetArticulationId);
+
+    if (art == nullptr)
+        art = piece.getPrimaryArticulation();
 
     if (art == nullptr)
     {
         Articulation newArt;
         newArt.id = Articulation::makeId();
-        newArt.name = articulationName.isNotEmpty() ? articulationName : "Hit";
+        newArt.name = "Hit";
         newArt.midiNote = piece.primaryMidiNote;
         art = &piece.addArticulation (std::move (newArt));
-    }
-    else if (articulationName.isNotEmpty())
-    {
-        art->name = articulationName;
     }
 
     art->layers.clear();
@@ -356,7 +598,12 @@ void KitModel::assignSingleSample (DrumPiece& piece, const juce::File& file, con
     layer.roundRobins.addSample (std::move (sample));
 
     art->layers.push_back (std::move (layer));
-    piece.syncMidiNotesFromArticulations();
+
+    if (piece.type == DrumPieceType::ride)
+        ensureStandardArticulations (piece);
+    else
+        piece.syncMidiNotesFromArticulations();
+
     notifyChanged();
 }
 

@@ -4,6 +4,7 @@
 #include "../Engine/DrumSample.h"
 #include "../Engine/SampleLayer.h"
 #include "../Models/DrumPiece.h"
+#include "../Models/KitModel.h"
 #include "../Models/DrumPieceTypes.h"
 #include "KitModelRecipeBridge.h"
 #include "KitShellLayoutEnforcer.h"
@@ -304,6 +305,7 @@ KitModel AIKitBuilderService::buildKitFromRecipe (const KitRecipe& recipe,
 
         piece.syncMidiNotesFromArticulations();
         normalizePieceVisuals (piece);
+        ensureStandardArticulations (piece);
 
         const bool hasSamples = existingPiece != nullptr
             && std::any_of (piece.articulations.begin(), piece.articulations.end(),

@@ -14,6 +14,10 @@ struct SampleMetadata
     DrumPieceType instrumentType = DrumPieceType::accessory;
     int instrumentIndex = 0;
     juce::String articulation;
+
+    /** Stable grouping key (e.g. "ride-17"). When set, the model builder groups
+        samples sharing this key into one piece. Empty = fall back to name-stem grouping. */
+    juce::String pieceGroupKey;
     int midiNote = 0;
     juce::String chokeGroupId;
     juce::StringArray tags;

@@ -1,6 +1,28 @@
 #include "KitSerializer.h"
 #include "../Core/DemoKitSampleBindings.h"
 
+namespace
+{
+    constexpr float kLayoutRefWidth  = 980.0f;
+    constexpr float kLayoutRefHeight = 680.0f;
+
+    void denormalizePieceLayoutIfNeeded (DrumPiece& piece)
+    {
+        const bool looksNormalized = piece.x >= 0.0f && piece.x <= 1.0f
+                                  && piece.y >= 0.0f && piece.y <= 1.0f
+                                  && piece.width > 0.0f && piece.width <= 1.0f
+                                  && piece.height > 0.0f && piece.height <= 1.0f;
+
+        if (! looksNormalized)
+            return;
+
+        piece.x *= kLayoutRefWidth;
+        piece.y *= kLayoutRefHeight;
+        piece.width *= kLayoutRefWidth;
+        piece.height *= kLayoutRefHeight;
+    }
+}
+
 juce::var KitSerializer::drumSampleToVar (const DrumSample& sample)
 {
     auto* obj = new juce::DynamicObject();
@@ -118,12 +140,65 @@ Articulation KitSerializer::articulationFromVar (const juce::var& v)
     return art;
 }
 
+juce::var KitSerializer::articulationToUiVar (const Articulation& art)
+{
+    int sampleCount = 0;
+
+    for (const auto& layer : art.layers)
+        sampleCount += (int) layer.roundRobins.samples.size();
+
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty ("id", art.id);
+    obj->setProperty ("name", art.name);
+    obj->setProperty ("midiNote", art.midiNote);
+    obj->setProperty ("chokeGroupId", art.chokeGroupId);
+    obj->setProperty ("hasSample", sampleCount > 0);
+    obj->setProperty ("layers", juce::Array<juce::var>());
+    return juce::var (obj);
+}
+
 juce::var KitSerializer::pieceToVar (const DrumPiece& piece)
 {
     juce::Array<juce::var> arts;
 
     for (const auto& art : piece.articulations)
         arts.add (articulationToVar (art));
+
+    juce::Array<juce::var> notes;
+
+    for (const auto note : piece.midiNotes)
+        notes.add (note);
+
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty ("id", piece.id);
+    obj->setProperty ("name", piece.name);
+    obj->setProperty ("type", drumPieceTypeToString (piece.type));
+    obj->setProperty ("midiNotes", notes);
+    obj->setProperty ("primaryMidiNote", piece.primaryMidiNote);
+    obj->setProperty ("chokeGroupId", piece.chokeGroupId);
+    obj->setProperty ("outputChannelPair", piece.outputChannelPair);
+    obj->setProperty ("volume", piece.volume);
+    obj->setProperty ("pan", piece.pan);
+    obj->setProperty ("pitch", piece.pitch);
+    obj->setProperty ("muted", piece.muted);
+    obj->setProperty ("soloed", piece.soloed);
+    obj->setProperty ("x", piece.x);
+    obj->setProperty ("y", piece.y);
+    obj->setProperty ("width", piece.width);
+    obj->setProperty ("height", piece.height);
+    obj->setProperty ("rotation", piece.rotation);
+    obj->setProperty ("color", (int) piece.color.getARGB());
+    obj->setProperty ("shapeType", shapeTypeToString (piece.shapeType));
+    obj->setProperty ("articulations", arts);
+    return juce::var (obj);
+}
+
+juce::var KitSerializer::pieceToUiVar (const DrumPiece& piece)
+{
+    juce::Array<juce::var> arts;
+
+    for (const auto& art : piece.articulations)
+        arts.add (articulationToUiVar (art));
 
     juce::Array<juce::var> notes;
 
@@ -197,6 +272,8 @@ DrumPiece KitSerializer::pieceFromVar (const juce::var& v)
 
     piece.syncMidiNotesFromArticulations();
     normalizePieceVisuals (piece);
+    denormalizePieceLayoutIfNeeded (piece);
+    ensureStandardArticulations (piece);
     return piece;
 }
 
@@ -206,6 +283,20 @@ juce::var KitSerializer::kitToVar (const KitModel& model)
 
     for (const auto& piece : model.getPieces())
         pieces.add (pieceToVar (piece));
+
+    auto* root = new juce::DynamicObject();
+    root->setProperty ("version", 2);
+    root->setProperty ("kitName", model.kitName);
+    root->setProperty ("pieces", pieces);
+    return juce::var (root);
+}
+
+juce::var KitSerializer::kitToUiVar (const KitModel& model)
+{
+    juce::Array<juce::var> pieces;
+
+    for (const auto& piece : model.getPieces())
+        pieces.add (pieceToUiVar (piece));
 
     auto* root = new juce::DynamicObject();
     root->setProperty ("version", 2);

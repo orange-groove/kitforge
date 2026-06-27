@@ -1,45 +1,29 @@
 #include "InstalledLibrary.h"
 
-InstalledLibrary InstalledLibrary::fromInstallJson (const juce::File& installJsonFile)
+InstalledLibrary InstalledLibrary::fromManifest (const KitManifest& manifest,
+                                                  const juce::File& installFolder,
+                                                  int sampleCountIn,
+                                                  int pieceCountIn)
 {
     InstalledLibrary lib;
-
-    if (! installJsonFile.existsAsFile())
-        return lib;
-
-    juce::var parsed;
-
-    if (juce::JSON::parse (installJsonFile.loadFileAsString(), parsed).failed())
-        return lib;
-
-    if (auto* obj = parsed.getDynamicObject())
-    {
-        lib.id = obj->getProperty ("id").toString();
-        lib.name = obj->getProperty ("name").toString();
-        lib.format = obj->getProperty ("format").toString();
-        lib.license = obj->getProperty ("license").toString();
-        lib.version = obj->getProperty ("version").toString();
-        lib.installedPath = obj->getProperty ("installedPath").toString();
-        lib.sourcePath = obj->getProperty ("sourcePath").toString();
-        lib.kitForgePath = obj->getProperty ("kitForgePath").toString();
-        lib.sfzFileUsed = obj->getProperty ("sfzFileUsed").toString();
-        lib.sampleCount = (int) obj->getProperty ("sampleCount");
-        lib.pieceCount = (int) obj->getProperty ("pieceCount");
-        lib.installedAtMs = (int64_t) obj->getProperty ("installedAtMs");
-
-        if (auto* tags = obj->getProperty ("tags").getArray())
-            for (const auto& tag : *tags)
-                lib.tags.add (tag.toString());
-    }
-
-    lib.rootPath = lib.installedPath;
+    lib.id = manifest.packageId;
+    lib.name = manifest.name;
+    lib.format = "kitforge";
+    lib.license = manifest.license;
+    lib.version = manifest.version;
+    lib.author = manifest.author;
+    lib.installedPath = installFolder.getFullPathName();
+    lib.kitForgePath = lib.installedPath;
+    lib.tags = manifest.tags;
+    lib.sampleCount = sampleCountIn;
+    lib.pieceCount = pieceCountIn;
+    lib.installedAtMs = juce::Time::getCurrentTime().toMilliseconds();
+    lib.sizeBytes = 0;
+    lib.thumbnailPath = installFolder.getChildFile (manifest.thumbnail).getFullPathName();
+    lib.previewAudioPath = installFolder.getChildFile (manifest.previewAudio).getFullPathName();
+    lib.licensePath = installFolder.getChildFile (manifest.licenseFile).getFullPathName();
+    lib.creditsPath = installFolder.getChildFile (manifest.creditsFile).getFullPathName();
     return lib;
-}
-
-bool InstalledLibrary::writeInstallJson (const juce::File& libraryRoot) const
-{
-    const auto file = libraryRoot.getChildFile ("install.json");
-    return file.replaceWithText (juce::JSON::toString (toVar(), true));
 }
 
 juce::var InstalledLibrary::toVar() const
@@ -55,13 +39,12 @@ juce::var InstalledLibrary::toVar() const
     obj->setProperty ("format", format);
     obj->setProperty ("license", license);
     obj->setProperty ("version", version);
+    obj->setProperty ("author", author);
     obj->setProperty ("installedPath", installedPath);
-    obj->setProperty ("sourcePath", sourcePath);
-    obj->setProperty ("kitForgePath", kitForgePath);
-    obj->setProperty ("sfzFileUsed", sfzFileUsed);
     obj->setProperty ("sampleCount", sampleCount);
     obj->setProperty ("pieceCount", pieceCount);
-    obj->setProperty ("installedAtMs", (double) installedAtMs);
     obj->setProperty ("tags", tagVars);
+    obj->setProperty ("thumbnailPath", thumbnailPath);
+    obj->setProperty ("previewAudioPath", previewAudioPath);
     return juce::var (obj);
 }

@@ -5,7 +5,7 @@
 
 class KitForgeAudioProcessor;
 
-/** Installed libraries on disk — load, remove, reveal, manual import. */
+/** Installed `.kitforge` kits on disk — load, remove, reveal, import. */
 class InstalledLibrariesPanel final : public juce::Component,
                                       public juce::ListBoxModel
 {
@@ -22,14 +22,14 @@ public:
 
 private:
     KitForgeAudioProcessor& processorRef;
-    juce::Label titleLabel { {}, "Installed Libraries" };
+    juce::Label titleLabel { {}, "Installed Kits" };
     juce::TextButton rescanButton { "Rescan" };
     juce::TextButton mapToKitButton { "Map to Kit" };
     juce::TextButton removeButton { "Remove" };
     juce::TextButton revealButton { "Reveal" };
     juce::TextButton importFolderButton { "Import Folder..." };
-    juce::TextButton importKontaktButton { "Import Kontakt..." };
     juce::TextButton importSfzButton { "Import SFZ..." };
+    juce::TextButton importKitforgeButton { "Install .kitforge..." };
     juce::ListBox libraryList { "LibraryList", this };
 
     int selectedRow = -1;

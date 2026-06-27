@@ -21,7 +21,10 @@ public:
     const std::vector<InstalledKit>& getKits() const { return kits; }
     const std::vector<SampleMetadata>& getSamples() const { return samples; }
 
-    /** Scan ~/Documents/KitForge/Libraries and rebuild the index (skeleton). */
+    /** Scan ~/Documents/KitForge/Kits and rebuild the index. */
+    void scanKitsOnDisk();
+
+    /** @deprecated Use scanKitsOnDisk(). */
     void scanLibrariesOnDisk();
 
     std::vector<SampleMetadata> searchByTags (const juce::StringArray& tags,

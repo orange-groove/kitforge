@@ -233,7 +233,7 @@ OpenAIRecipeResult OpenAIKitRecipeClient::requestRecipe (const juce::String& use
 
     if (content.isEmpty())
     {
-        result.errorMessage = "OpenAI returned no kit recipe content.";
+        result.errorMessage = "AI returned no kit recipe content.";
         return result;
     }
 
@@ -250,7 +250,7 @@ OpenAIRecipeResult OpenAIKitRecipeClient::requestRecipe (const juce::String& use
 
     if (result.recipe.pieces.empty())
     {
-        result.errorMessage = "OpenAI returned a recipe with no drum pieces.";
+        result.errorMessage = "AI returned a recipe with no drum pieces.";
         return result;
     }
 

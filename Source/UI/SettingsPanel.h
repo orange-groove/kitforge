@@ -4,7 +4,7 @@
 
 class KitForgeAudioProcessor;
 
-/** Paths, catalog URL, OpenAI key, and library settings. */
+/** Paths and OpenAI settings. */
 class SettingsPanel final : public juce::Component
 {
 public:
@@ -19,10 +19,8 @@ public:
 private:
     KitForgeAudioProcessor& processorRef;
     juce::Label titleLabel { {}, "Settings" };
-    juce::Label libraryPathLabel;
-    juce::Label catalogUrlLabel;
-    juce::TextEditor catalogUrlEditor;
-    juce::TextButton openLibraryFolderButton { "Open Library Folder" };
+    juce::Label kitsPathLabel;
+    juce::TextButton openKitsFolderButton { "Open Kits Folder" };
 
     juce::Label aiSectionLabel { {}, "AI Kit Builder (OpenAI)" };
     juce::Label apiKeyLabel { {}, "API key:" };

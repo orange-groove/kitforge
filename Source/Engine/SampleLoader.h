@@ -21,6 +21,12 @@ public:
 
     void prepare (double sampleRate);
     const LoadedSample* load (const juce::String& filePath);
+
+    /** Decodes any not-yet-cached paths in parallel. Much faster than calling
+        load() in a loop for large kits (startup preload). */
+    void loadMany (const juce::StringArray& filePaths);
+
+    const LoadedSample* getCached (const juce::String& filePath) const;
     void unloadAll();
     void pruneUnused (const juce::StringArray& referencedPaths);
 

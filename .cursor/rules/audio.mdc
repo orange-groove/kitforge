@@ -1,0 +1,19 @@
+---
+description: Audio engine and real-time safety rules
+globs: Source/Engine/**/*.h,Source/Engine/**/*.cpp,Source/PluginProcessor.h,Source/PluginProcessor.cpp
+alwaysApply: false
+---
+
+# Audio Engine
+
+Playback is driven entirely by `KitModel`. Never read SFZ (or any external format) during playback.
+
+## Real-time safety
+
+- Never block the audio thread.
+- Never perform disk IO inside `processBlock()`.
+- Decode/load samples ahead of time (preload), not on the audio thread.
+
+## Must keep working
+
+Sample playback must always honor: velocity layers, round robins, articulations, choke groups, and future multi-output routing.

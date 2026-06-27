@@ -600,6 +600,6 @@ void enforceDefaultCymbals (KitRecipe& recipe, const juce::String& prompt)
     if (! recipeHasCymbalType (recipe, DrumPieceType::ride))
     {
         recipe.pieces.push_back (makeDefaultCymbal (DrumPieceType::ride, "Ride",
-                                                    { { "Bow", 51 } }, tags));
+                                                    { { "Edge", 51 }, { "Bell", 53 } }, tags));
     }
 }

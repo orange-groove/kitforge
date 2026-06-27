@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "Serialization/KitSerializer.h"
+#include "Serialization/KitForgePackageReader.h"
 #include "Core/KitForgePaths.h"
 #include "Core/DemoKitSampleBindings.h"
 
@@ -12,12 +13,12 @@ KitForgeAudioProcessor::KitForgeAudioProcessor()
 
     if (services.consumeDemoKitRepairFlag())
     {
-        const auto installPath = KitForgePaths::getLibraryInstallPath ("demo-rock-kit");
-        const auto importResult = services.getPackImporter().importFolder (installPath);
+        const auto installPath = KitForgePaths::getKitInstallPath ("demo-rock-kit");
+        const auto loaded = KitForgePackageReader::loadInstalledKit (installPath);
 
-        if (importResult.success)
+        if (loaded.success)
         {
-            auto kit = importResult.kit;
+            auto kit = loaded.kit;
             kit.resolveSamplePaths (installPath);
             DemoKitSampleBindings::bindSamplePathsFromFolder (kit, installPath);
             kit.resolveSamplePaths (installPath);
@@ -120,11 +121,28 @@ void KitForgeAudioProcessor::triggerPiece (const juce::String& pieceId, float ve
     samplerEngine.queueTriggerPiece (pieceId, velocity);
 }
 
+void KitForgeAudioProcessor::triggerArticulation (const juce::String& pieceId,
+                                                     const juce::String& articulationId, float velocity)
+{
+    samplerEngine.queueTriggerArticulation (pieceId, articulationId, velocity);
+}
+
 
 void KitForgeAudioProcessor::rebuildEngine()
 {
-    const juce::ScopedLock lock (modelLock);
-    samplerEngine.rebuildFromModel (kitModel);
+    juce::StringArray paths;
+
+    {
+        const juce::ScopedLock lock (modelLock);
+        samplerEngine.collectReferencedPaths (kitModel, paths);
+    }
+
+    samplerEngine.preloadSamples (paths);
+
+    {
+        const juce::ScopedLock lock (modelLock);
+        samplerEngine.syncFromModel (kitModel, paths);
+    }
 }
 
 bool KitForgeAudioProcessor::hasEditor() const { return true; }
@@ -155,7 +173,7 @@ void KitForgeAudioProcessor::setStateInformation (const void* data, int sizeInBy
 
         if (! DemoKitSampleBindings::kitHasAssignedSamples (kitModel))
         {
-            const auto demoInstall = KitForgePaths::getLibraryInstallPath ("demo-rock-kit");
+            const auto demoInstall = KitForgePaths::getKitInstallPath ("demo-rock-kit");
             DemoKitSampleBindings::bindSamplePathsFromFolder (kitModel, demoInstall);
             kitModel.resolveSamplePaths (demoInstall);
         }

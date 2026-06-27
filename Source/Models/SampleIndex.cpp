@@ -1,7 +1,8 @@
 #include "SampleIndex.h"
 #include "InstalledLibrary.h"
 #include "../Core/KitForgePaths.h"
-#include "../Serialization/KitSerializer.h"
+#include "../Serialization/ManifestSerializer.h"
+#include "../Serialization/KitMigrationService.h"
 
 void SampleIndex::clear()
 {
@@ -29,77 +30,60 @@ void SampleIndex::addSample (SampleMetadata sample)
     notifyChanged();
 }
 
-void SampleIndex::scanLibrariesOnDisk()
+void SampleIndex::scanKitsOnDisk()
 {
     clear();
     KitForgePaths::ensureDirectoryStructure();
 
-    const auto root = KitForgePaths::getLibrariesRoot();
+    const auto root = KitForgePaths::getKitsRoot();
 
     for (const auto& entry : root.findChildFiles (juce::File::findDirectories, false))
     {
-        InstalledLibrary lib;
-        const auto installJson = entry.getChildFile ("install.json");
+        const auto manifestFile = entry.getChildFile ("manifest.json");
 
-        if (installJson.existsAsFile())
-        {
-            lib = InstalledLibrary::fromInstallJson (installJson);
-            lib.sizeBytes = entry.getSize();
-        }
-        else
-        {
-            lib.id = entry.getFileName();
-            lib.name = entry.getFileName();
-            lib.installedPath = entry.getFullPathName();
-            lib.rootPath = lib.installedPath;
-            lib.installedAtMs = entry.getLastModificationTime().toMilliseconds();
-            lib.sizeBytes = entry.getSize();
+        if (! manifestFile.existsAsFile())
+            continue;
 
-            const auto kitForgeSub = entry.getChildFile ("kitforge");
+        KitManifest manifest;
+        juce::String manifestError;
 
-            if (kitForgeSub.isDirectory())
-            {
-                lib.kitForgePath = kitForgeSub.getFullPathName();
-                lib.format = "sfz";
-            }
-            else if (entry.getChildFile ("kit.json").existsAsFile())
-            {
-                lib.kitForgePath = lib.installedPath;
-                lib.format = "kitforgepack";
-            }
-            else
-            {
-                lib.format = "unknown";
-            }
-        }
+        if (! ManifestSerializer::readFromFile (manifestFile, manifest, manifestError))
+            continue;
 
-        if (lib.name.isEmpty())
-            lib.name = lib.id;
+        const auto migration = KitMigrationService::validateManifest (manifest);
 
+        if (! migration.ok)
+            continue;
+
+        const auto kitJson = entry.getChildFile (manifest.kitFile.isNotEmpty() ? manifest.kitFile : "kit.json");
+
+        if (! kitJson.existsAsFile())
+            continue;
+
+        auto lib = InstalledLibrary::fromManifest (manifest, entry,
+                                                   manifest.sampleCount,
+                                                   manifest.pieceCount);
+        lib.sizeBytes = manifest.installSizeBytes;
         addLibrary (lib);
 
-        const auto kitJson = lib.getKitJsonFile();
-
-        if (kitJson.existsAsFile())
-        {
-            InstalledKit kit;
-            kit.id = lib.id;
-            kit.name = lib.name;
-            kit.source = installJson.existsAsFile() ? "catalog" : "import";
-            kit.libraryId = lib.id;
-            kit.kitJsonPath = kitJson.getFullPathName();
-            kit.artworkPath = juce::File (lib.kitForgePath).getChildFile ("artwork").getFullPathName();
-            kit.licensePath = lib.licensePath.isNotEmpty()
-                                ? lib.licensePath
-                                : juce::File (lib.kitForgePath).getChildFile ("license.txt").getFullPathName();
-            kit.creditsPath = lib.creditsPath.isNotEmpty()
-                                ? lib.creditsPath
-                                : juce::File (lib.kitForgePath).getChildFile ("credits.txt").getFullPathName();
-            kit.tags = lib.tags;
-            kit.installedAtMs = lib.installedAtMs;
-            addKit (std::move (kit));
-        }
+        InstalledKit installedKit;
+        installedKit.id = lib.id;
+        installedKit.name = lib.name;
+        installedKit.source = "kitforge";
+        installedKit.libraryId = lib.id;
+        installedKit.kitJsonPath = kitJson.getFullPathName();
+        installedKit.artworkPath = lib.thumbnailPath;
+        installedKit.licensePath = lib.licensePath;
+        installedKit.creditsPath = lib.creditsPath;
+        installedKit.tags = lib.tags;
+        installedKit.installedAtMs = lib.installedAtMs;
+        addKit (std::move (installedKit));
     }
+}
+
+void SampleIndex::scanLibrariesOnDisk()
+{
+    scanKitsOnDisk();
 }
 
 std::vector<SampleMetadata> SampleIndex::searchByTags (const juce::StringArray& tags,
@@ -116,7 +100,7 @@ std::vector<SampleMetadata> SampleIndex::searchByTags (const juce::StringArray& 
         const int score = sample.matchScoreForTags (tags);
 
         if (score > 0)
-            ranked.push_back ({ score, sample });
+            ranked.emplace_back (score, sample);
     }
 
     std::sort (ranked.begin(), ranked.end(),
@@ -150,21 +134,14 @@ std::vector<SampleMetadata> SampleIndex::searchByInstrumentType (DrumPieceType t
 
 bool SampleIndex::saveCache (const juce::File& file) const
 {
-    auto* root = new juce::DynamicObject();
-    root->setProperty ("version", 1);
-    root->setProperty ("sampleCount", (int) samples.size());
-    return file.replaceWithText (juce::JSON::toString (juce::var (root), true));
+    juce::ignoreUnused (file);
+    return false;
 }
 
 bool SampleIndex::loadCache (const juce::File& file)
 {
-    juce::var parsed;
-
-    if (! file.existsAsFile() || juce::JSON::parse (file.loadFileAsString(), parsed).failed())
-        return false;
-
-    juce::ignoreUnused (parsed);
-    return true;
+    juce::ignoreUnused (file);
+    return false;
 }
 
 void SampleIndex::addListener (std::function<void()> listener)

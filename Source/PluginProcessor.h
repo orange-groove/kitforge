@@ -45,6 +45,8 @@ public:
     DrumSamplerEngine& getSamplerEngine() { return samplerEngine; }
 
     void triggerPiece (const juce::String& pieceId, float velocity = 127.0f);
+    void triggerArticulation (const juce::String& pieceId, const juce::String& articulationId,
+                              float velocity = 127.0f);
     void rebuildEngine();
     juce::CriticalSection& getModelLock() { return modelLock; }
 

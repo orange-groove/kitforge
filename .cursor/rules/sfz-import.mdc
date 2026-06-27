@@ -1,0 +1,38 @@
+---
+description: Import pipeline, sample naming, MIDI defaults, and drum layout
+globs: Source/Importers/**/*.h,Source/Importers/**/*.cpp
+alwaysApply: false
+---
+
+# Imports
+
+Supported: SFZ, loose WAV folders. Future: DrumGizmo. External formats are IMPORT ONLY — immediately convert into `KitModel`, and export as `.kitforge`.
+
+## Sample naming (when no SFZ)
+
+Support velocity/round-robin patterns, e.g.:
+
+```
+Kick_Center_V127_RR1.wav
+Snare_Rimshot_V110_RR2.wav
+Hat_Open_V090_RR3.wav
+Ride_Bell_V127_RR1.wav
+```
+
+Also word-based velocity: `Kick_soft_rr1.wav`, `Kick_medium_rr2.wav`, `Kick_hard_rr3.wav`.
+
+## MIDI defaults
+
+Kick 36 · Snare Center 38 · Snare Rim 40 · Cross Stick 37 · Closed Hat 42 · Pedal Hat 44 · Open Hat 46 · Rack Tom 1 48 · Rack Tom 2 47 · Rack Tom 3 45 · Floor Tom 1 43 · Floor Tom 2 41 · Crash 49 · Crash 2 57 · Ride Bow 51 · Ride Bell 53 · China 52 · Splash 55.
+
+## Drum layout
+
+Coordinate system: `x` = drummer's left → right; `y` = back of kit → toward drummer. Piece count refers ONLY to shells:
+
+- 4-piece: Kick, Snare, 1 Rack, 1 Floor
+- 5-piece: Kick, Snare, 2 Rack, 1 Floor
+- 6-piece: Kick, Snare, 2 Rack, 2 Floor
+- 7-piece: Kick, Snare, 3 Rack, 2 Floor
+- 8-piece: Kick, Snare, 3 Rack, 3 Floor
+
+Rules: never overlap pieces; never place floor toms in the rack-tom area; never mix rack toms into floor-tom positions.

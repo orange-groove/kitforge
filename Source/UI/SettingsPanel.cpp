@@ -17,8 +17,8 @@ namespace
             setUsingNativeTitleBar (true);
             setContentNonOwned (content, true);
             setResizable (true, true);
-            setResizeLimits (420, 360, 720, 800);
-            centreWithSize (480, 420);
+            setResizeLimits (420, 320, 720, 640);
+            centreWithSize (480, 380);
         }
 
         void closeButtonPressed() override
@@ -60,23 +60,20 @@ void SettingsPanel::showWindow (juce::Component* parent, KitForgeAudioProcessor&
 SettingsPanel::SettingsPanel (KitForgeAudioProcessor& processorIn)
     : processorRef (processorIn)
 {
+    juce::ignoreUnused (processorRef);
+
     addAndMakeVisible (titleLabel);
     titleLabel.setFont (juce::FontOptions (18.0f, juce::Font::bold));
 
-    addAndMakeVisible (libraryPathLabel);
-    libraryPathLabel.setText ("Library: " + KitForgePaths::getLibrariesRoot().getFullPathName(), juce::dontSendNotification);
+    addAndMakeVisible (kitsPathLabel);
+    kitsPathLabel.setText ("Installed kits: " + KitForgePaths::getKitsRoot().getFullPathName(),
+                           juce::dontSendNotification);
 
-    addAndMakeVisible (catalogUrlLabel);
-    catalogUrlLabel.setText ("Catalog manifest URL:", juce::dontSendNotification);
-
-    addAndMakeVisible (catalogUrlEditor);
-    catalogUrlEditor.setText (processorRef.getServices().getCatalog().getManifestUrl());
-
-    addAndMakeVisible (openLibraryFolderButton);
-    openLibraryFolderButton.onClick = []
+    addAndMakeVisible (openKitsFolderButton);
+    openKitsFolderButton.onClick = []
     {
         KitForgePaths::ensureDirectoryStructure();
-        KitForgePaths::getLibrariesRoot().revealToUser();
+        KitForgePaths::getKitsRoot().revealToUser();
     };
 
     addAndMakeVisible (aiSectionLabel);
@@ -126,12 +123,9 @@ void SettingsPanel::resized()
     auto area = getLocalBounds().reduced (16);
     titleLabel.setBounds (area.removeFromTop (28));
     area.removeFromTop (16);
-    libraryPathLabel.setBounds (area.removeFromTop (24));
+    kitsPathLabel.setBounds (area.removeFromTop (24));
     area.removeFromTop (16);
-    catalogUrlLabel.setBounds (area.removeFromTop (22));
-    catalogUrlEditor.setBounds (area.removeFromTop (28));
-    area.removeFromTop (16);
-    openLibraryFolderButton.setBounds (area.removeFromTop (32).removeFromLeft (180));
+    openKitsFolderButton.setBounds (area.removeFromTop (32).removeFromLeft (180));
     area.removeFromTop (24);
     aiSectionLabel.setBounds (area.removeFromTop (24));
     area.removeFromTop (8);

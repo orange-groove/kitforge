@@ -1,0 +1,13 @@
+---
+description: General code quality and structure standards
+alwaysApply: true
+---
+
+# Code Quality
+
+- Keep systems modular; avoid giant classes.
+- Keep business logic out of `PluginEditor` (C++) and out of React components.
+- Never block the audio thread; never perform disk IO inside `processBlock()`.
+- Use C++17.
+- Prefer composition over inheritance.
+- Make the architecture expandable before making it fancy.

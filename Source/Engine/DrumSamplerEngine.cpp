@@ -20,15 +20,21 @@ void DrumSamplerEngine::prepare (double sampleRate, int samplesPerBlock)
 
 void DrumSamplerEngine::rebuildFromModel (const KitModel& model)
 {
-    stopAllVoices();
-
     juce::StringArray paths;
     collectReferencedPaths (model, paths);
+    preloadSamples (paths);
+    syncFromModel (model, paths);
+}
 
-    for (const auto& path : paths)
-        sampleLoader.load (path);
+void DrumSamplerEngine::preloadSamples (const juce::StringArray& paths)
+{
+    sampleLoader.loadMany (paths);
+}
 
-    sampleLoader.pruneUnused (paths);
+void DrumSamplerEngine::syncFromModel (const KitModel& model, const juce::StringArray& referencedPaths)
+{
+    stopAllVoices();
+    sampleLoader.pruneUnused (referencedPaths);
     buildMidiMap (model);
 }
 
@@ -91,18 +97,22 @@ void DrumSamplerEngine::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 
 void DrumSamplerEngine::processPendingTriggers (const KitModel& model)
 {
-    const int numReady = pendingFifo.getNumReady();
+    std::vector<PendingTrigger> ready;
 
-    for (int i = 0; i < numReady; ++i)
     {
-        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-        pendingFifo.prepareToRead (1, start1, size1, start2, size2);
+        const juce::ScopedLock lock (triggerLock);
+        ready.swap (pendingTriggers);
+    }
 
-        const auto trigger = pendingTriggers[(size_t) start1];
-        pendingFifo.finishedRead (1);
-
+    for (const auto& trigger : ready)
+    {
         if (trigger.usePieceId)
-            triggerPiece (model, trigger.pieceId, trigger.velocity);
+        {
+            if (trigger.articulationId.isNotEmpty())
+                triggerPieceArticulation (model, trigger.pieceId, trigger.articulationId, trigger.velocity);
+            else
+                triggerPiece (model, trigger.pieceId, trigger.velocity);
+        }
         else
             triggerMidiNote (model, trigger.midiNote, trigger.velocity);
     }
@@ -113,29 +123,57 @@ void DrumSamplerEngine::triggerMidiNote (const KitModel& model, int midiNote, fl
     const auto ref = model.findArticulationByMidiNote (midiNote);
 
     if (ref.piece != nullptr && ref.articulation != nullptr)
-        triggerArticulation (*ref.piece, *ref.articulation, velocity);
+        playArticulation (*ref.piece, *ref.articulation, velocity);
+}
+
+void DrumSamplerEngine::triggerPiece (const juce::String& pieceId, float velocity)
+{
+    queueTriggerPiece (pieceId, velocity);
+}
+
+void DrumSamplerEngine::triggerArticulation (const juce::String& pieceId,
+                                              const juce::String& articulationId, float velocity)
+{
+    queueTriggerArticulation (pieceId, articulationId, velocity);
 }
 
 void DrumSamplerEngine::triggerPiece (const KitModel& model, const juce::String& pieceId, float velocity)
 {
     if (const auto* piece = model.findPieceById (pieceId))
         if (const auto* art = piece->getPrimaryArticulation())
-            triggerArticulation (*piece, *art, velocity);
+            playArticulation (*piece, *art, velocity);
+}
+
+void DrumSamplerEngine::triggerPieceArticulation (const KitModel& model, const juce::String& pieceId,
+                                                   const juce::String& articulationId, float velocity)
+{
+    if (const auto* piece = model.findPieceById (pieceId))
+    {
+        if (const auto* art = piece->findArticulationById (articulationId))
+        {
+            playArticulation (*piece, *art, velocity);
+            return;
+        }
+
+        if (const auto* art = piece->getPrimaryArticulation())
+            playArticulation (*piece, *art, velocity);
+    }
 }
 
 void DrumSamplerEngine::queueTriggerPiece (const juce::String& pieceId, float velocity)
 {
-    int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-    pendingFifo.prepareToWrite (1, start1, size1, start2, size2);
-
-    if (size1 > 0)
-    {
-        pendingTriggers[(size_t) start1] = { 0, velocity, pieceId, true };
-        pendingFifo.finishedWrite (1);
-    }
+    const juce::ScopedLock lock (triggerLock);
+    pendingTriggers.push_back ({ 0, velocity, pieceId, {}, true });
 }
 
-void DrumSamplerEngine::triggerArticulation (const DrumPiece& piece, const Articulation& art, float velocity)
+void DrumSamplerEngine::queueTriggerArticulation (const juce::String& pieceId,
+                                                   const juce::String& articulationId, float velocity)
+{
+    const juce::ScopedLock lock (triggerLock);
+    pendingTriggers.push_back ({ 0, velocity, pieceId, articulationId, true });
+}
+
+void DrumSamplerEngine::playArticulation (const DrumPiece& piece, const Articulation& art, float velocity)
 {
     if (piece.muted)
         return;
@@ -154,7 +192,7 @@ void DrumSamplerEngine::triggerArticulation (const DrumPiece& piece, const Artic
     if (drumSample.filePath.isEmpty())
         return;
 
-    const auto* loaded = sampleLoader.load (drumSample.filePath);
+    const auto* loaded = sampleLoader.getCached (drumSample.filePath);
 
     if (loaded == nullptr)
         return;
@@ -200,6 +238,11 @@ void DrumSamplerEngine::stopAllVoices()
         voice.forceStop();
 
     chokeManager.clear();
-    pendingFifo.reset();
+
+    {
+        const juce::ScopedLock lock (triggerLock);
+        pendingTriggers.clear();
+    }
+
     roundRobinIndices.clear();
 }

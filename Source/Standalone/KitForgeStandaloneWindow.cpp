@@ -14,6 +14,8 @@ void KitForgeStandaloneWindow::configureNativeChrome()
 {
     setUsingNativeTitleBar (true);
     setTitleBarButtonsRequired (juce::DocumentWindow::allButtons, false);
+    setResizable (true, true);
+    setResizeLimits (720, 520, 2560, 1600);
 
     for (int i = 0; i < getNumChildComponents(); ++i)
         if (auto* button = dynamic_cast<juce::TextButton*> (getChildComponent (i)))

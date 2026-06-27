@@ -4,27 +4,15 @@
   "_todo": "Fill downloadUrl for each library after verifying license and hosting. Remote manifest can replace this bundled file.",
   "libraries": [
     {
-      "id": "demo-rock-kit",
-      "name": "Demo Rock Kit (Offline)",
-      "format": "kitforgepack",
-      "license": "Demo / internal use",
-      "sizeMb": 0.9,
-      "homepageUrl": "",
-      "downloadUrl": "",
-      "tags": ["demo", "rock", "offline", "recommended"],
-      "description": "Bundled demo pack with real drum one-shots for offline testing.",
-      "recommended": true
-    },
-    {
       "id": "salamander-drumkit",
       "name": "Salamander Drumkit",
       "format": "sfz",
       "license": "CC-BY-SA-3.0",
       "sizeMb": 370,
-      "homepageUrl": "https://freepats.zenvoid.org/",
-      "downloadUrl": "",
+      "homepageUrl": "https://sfzinstruments.github.io/drums/salamander/",
+      "downloadUrl": "https://archive.org/download/SalamanderDrumkit/salamanderDrumkit.tar.bz2",
       "tags": ["acoustic", "rock", "multi-velocity", "round-robin", "open-source"],
-      "description": "Open SFZ acoustic drum kit. Attribution required (CC-BY-SA). Download URL TODO — verify upstream before enabling.",
+      "description": "Open SFZ acoustic drum kit (~370 MB). CC-BY-SA - attribution required.",
       "recommended": true
     },
     {

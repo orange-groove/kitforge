@@ -64,6 +64,10 @@ settings.json
 Resources/demo-samples/.fetch_tmp/
 Resources/demo-samples/tmp/
 
+# React UI
+ui/node_modules/
+ui/dist/
+
 # Logs and crash dumps
 *.log
 *.dSYM/

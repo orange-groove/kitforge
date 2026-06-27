@@ -14,6 +14,8 @@ public:
         juce::String creditsText;
         juce::String licenseText;
         bool generatePlaceholderLicense = true;
+        /** When true, sample paths in the kit are written as-is (no copy into samples/). */
+        bool referenceSamplesInPlace = false;
     };
 
     struct WriteResult

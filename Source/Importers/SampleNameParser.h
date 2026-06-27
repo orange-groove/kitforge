@@ -21,6 +21,7 @@ private:
     };
 
     InstrumentMatch matchInstrumentToken (const juce::String& token) const;
+    InstrumentMatch matchCompoundInstrumentToken (const juce::String& token) const;
     InstrumentMatch matchArticulationToken (const juce::String& token, DrumPieceType type) const;
     InstrumentMatch inferFromFolderName (const juce::String& folderName) const;
     void applyVelocityToken (const juce::String& token, SampleMetadata& meta) const;

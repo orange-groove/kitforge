@@ -73,12 +73,20 @@ SampleMetadata SampleNameParser::parseFile (const juce::File& file) const
             continue;
         }
 
-        const auto instrumentMatch = matchInstrumentToken (token);
+        auto instrumentMatch = matchInstrumentToken (token);
+
+        if (instrumentMatch.confidence <= bestMatch.confidence)
+            instrumentMatch = matchCompoundInstrumentToken (token);
 
         if (instrumentMatch.confidence > bestMatch.confidence)
         {
             bestMatch = instrumentMatch;
-            articulationCandidate.clear();
+
+            if (instrumentMatch.articulation.isNotEmpty())
+                articulationCandidate = instrumentMatch.articulation;
+            else
+                articulationCandidate.clear();
+
             hasStructuredName = true;
         }
         else if (bestMatch.type != DrumPieceType::accessory)
@@ -238,6 +246,58 @@ SampleNameParser::InstrumentMatch SampleNameParser::matchInstrumentToken (const 
     {
         match.type = DrumPieceType::accessory;
         match.confidence = 0.7f;
+        return match;
+    }
+
+    return match;
+}
+
+SampleNameParser::InstrumentMatch SampleNameParser::matchCompoundInstrumentToken (const juce::String& token) const
+{
+    InstrumentMatch match;
+    const auto norm = normalizeToken (token);
+
+    struct SuffixArt
+    {
+        const char* suffix;
+        const char* articulation;
+    };
+
+    static constexpr SuffixArt kSuffixArts[] = {
+        { "bell", "Bell" },
+        { "bow", "Bow" },
+        { "edge", "Edge" },
+        { "closed", "Closed" },
+        { "open", "Open" },
+        { "pedal", "Pedal" },
+        { "rimshot", "Rimshot" },
+        { "sidestick", "Sidestick" },
+    };
+
+    for (const auto& entry : kSuffixArts)
+    {
+        const juce::String suffix (entry.suffix);
+
+        if (! norm.endsWith (suffix) || norm.length() <= (size_t) suffix.length())
+            continue;
+
+        const auto prefix = norm.substring (0, norm.length() - suffix.length());
+        auto inst = matchInstrumentToken (prefix);
+
+        if (inst.confidence <= 0.0f)
+            continue;
+
+        match = inst;
+        match.articulation = entry.articulation;
+
+        const auto artMatch = matchArticulationToken (suffix, inst.type);
+
+        if (artMatch.midiNote > 0)
+            match.midiNote = artMatch.midiNote;
+
+        if (artMatch.chokeGroupId.isNotEmpty())
+            match.chokeGroupId = artMatch.chokeGroupId;
+
         return match;
     }
 

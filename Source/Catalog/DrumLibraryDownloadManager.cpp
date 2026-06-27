@@ -3,6 +3,30 @@
 #include "../Core/KitForgePaths.h"
 #include "../Importers/ImportWarning.h"
 
+namespace
+{
+    juce::String archiveExtensionFromUrl (const juce::String& url)
+    {
+        const juce::URL parsed (url);
+        const auto path = parsed.getSubPath().trim().toLowerCase();
+
+        if (path.endsWith (".tar.bz2")) return ".tar.bz2";
+        if (path.endsWith (".tar.gz"))  return ".tar.gz";
+        if (path.endsWith (".kitforgepack")) return ".kitforgepack";
+        if (path.endsWith (".zip")) return ".zip";
+
+        return ".zip";
+    }
+
+    int64 minimumExpectedArchiveBytes (const OnlineDrumLibrary& library)
+    {
+        if (library.sizeMb > 1.0)
+            return (int64) (library.sizeMb * 0.25 * 1024.0 * 1024.0);
+
+        return 65536;
+    }
+}
+
 DrumLibraryDownloadManager::DrumLibraryDownloadManager (DownloadManager& downloadsIn,
                                                           SFZImporter& sfzImporterIn,
                                                           KitForgePackImporter& packImporterIn,
@@ -78,7 +102,10 @@ void DrumLibraryDownloadManager::installLibraryAsync (const OnlineDrumLibrary& l
 
     libraryRoot = DrumLibraryInstallHelper::getLibraryRoot (library.id);
     sourceFolder = libraryRoot.getChildFile ("source");
-    archiveFile = KitForgePaths::getDownloadsCacheRoot().getChildFile (library.id + ".zip");
+
+    const auto downloadUrl = catalog.resolveDownloadUrl (library);
+    archiveFile = KitForgePaths::getDownloadsCacheRoot()
+                      .getChildFile (library.id + archiveExtensionFromUrl (downloadUrl));
 
     KitForgePaths::ensureDirectoryStructure();
 
@@ -90,6 +117,21 @@ void DrumLibraryDownloadManager::installLibraryAsync (const OnlineDrumLibrary& l
 
     if (library.format.equalsIgnoreCase ("sfz"))
     {
+        const auto kitJson = libraryRoot.getChildFile ("kitforge").getChildFile ("kit.json");
+
+        if (sourceFolder.isDirectory() && ! kitJson.existsAsFile())
+        {
+            const auto candidates = SFZScanner::scanFolder (sourceFolder);
+
+            if (candidates.size() > 0)
+            {
+                report (DrumLibraryInstallStage::scanning, 0.4,
+                        "Finishing install from downloaded files...");
+                scanAndImportOnBackground();
+                return;
+            }
+        }
+
         beginDownload();
         return;
     }
@@ -129,9 +171,19 @@ void DrumLibraryDownloadManager::onDownloadFinished (const DownloadProgress& dl)
         return;
     }
 
-    if (dl.failed || ! archiveFile.existsAsFile() || archiveFile.getSize() < 64)
+    if (dl.failed || ! archiveFile.existsAsFile())
     {
         fail (dl.errorMessage.isNotEmpty() ? dl.errorMessage : "Download failed or archive is incomplete.");
+        return;
+    }
+
+    const auto minBytes = minimumExpectedArchiveBytes (currentLibrary);
+
+    if (archiveFile.getSize() < minBytes)
+    {
+        fail ("Download appears incomplete ("
+              + juce::String (archiveFile.getSize()) + " bytes received, expected at least "
+              + juce::String (minBytes) + ").");
         return;
     }
 

@@ -17,11 +17,14 @@ public:
 
     static juce::var articulationToVar (const Articulation& art);
     static Articulation articulationFromVar (const juce::var& v);
+    static juce::var articulationToUiVar (const Articulation& art);
 
     static juce::var pieceToVar (const DrumPiece& piece);
     static DrumPiece pieceFromVar (const juce::var& v);
+    static juce::var pieceToUiVar (const DrumPiece& piece);
 
     static juce::var kitToVar (const KitModel& model);
+    static juce::var kitToUiVar (const KitModel& model);
     static void kitFromVar (KitModel& model, const juce::var& v);
 
     static bool saveKitToFile (const KitModel& model, const juce::File& file);

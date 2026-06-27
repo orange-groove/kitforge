@@ -1,0 +1,19 @@
+---
+description: AI kit-builder rules and flow
+globs: Source/AI/**/*.h,Source/AI/**/*.cpp,ui/src/components/ai/**/*.tsx
+alwaysApply: false
+---
+
+# AI
+
+AI generates Kit Recipes. AI NEVER generates audio. AI returns JSON, which maps onto installed samples.
+
+## Flow
+
+```
+Prompt → AI Recipe → Validate → Sample Search → KitModel → React
+```
+
+- Always validate AI JSON before applying it.
+- Map recipes onto existing installed samples; never synthesize or invent audio.
+- The resulting `KitModel` is authoritative; React only renders it.

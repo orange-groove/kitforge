@@ -3,6 +3,10 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 
+#if JUCE_WEB_BROWSER
+ #include "UI/WebViewBridge.h"
+#endif
+
 class KitForgeAudioProcessorEditor final : public juce::AudioProcessorEditor
 {
 public:
@@ -15,13 +19,17 @@ public:
 private:
     KitForgeAudioProcessor& processorRef;
 
-    juce::TabbedComponent mainTabs { juce::TabbedButtonBar::TabsAtTop };
+#if JUCE_WEB_BROWSER
+    std::unique_ptr<WebViewBridge> bridge;
+    std::unique_ptr<juce::WebBrowserComponent> webView;
+    juce::Label fallbackLabel;
+    bool webViewLoadFailed = false;
 
-    std::unique_ptr<class KitBuilderPanel> kitBuilder;
-    std::unique_ptr<class LibraryBrowserPanel> libraryBrowser;
-    std::unique_ptr<class KitForgeStandaloneHeader> standaloneHeader;
-
-    bool isStandaloneApp = false;
+    void loadWebViewUrl();
+    void showFallback (const juce::String& reason);
+#else
+    juce::Label fallbackLabel;
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KitForgeAudioProcessorEditor)
 };

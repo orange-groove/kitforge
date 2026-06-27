@@ -49,6 +49,26 @@ namespace SampleNameParserSelfTests
         }
 
         {
+            const auto meta = parser.parseFile (juce::File ("ride1Bell_OH_F_1.wav"));
+            ok &= expectEqual (meta.instrumentType == DrumPieceType::ride, "salamander ride bell type");
+            ok &= expectEqual (meta.articulation == "Bell", "salamander ride bell art");
+            ok &= expectEqual (meta.midiNote == 53, "salamander ride bell midi");
+        }
+
+        {
+            const auto meta = parser.parseFile (juce::File ("ride1_OH_FF_1.wav"));
+            ok &= expectEqual (meta.instrumentType == DrumPieceType::ride, "salamander ride bow type");
+            ok &= expectEqual (meta.articulation == "Bow", "salamander ride bow art");
+            ok &= expectEqual (meta.midiNote == 51, "salamander ride bow midi");
+        }
+
+        {
+            const auto meta = parser.parseFile (juce::File ("china1_OH_FF_1.wav"));
+            ok &= expectEqual (meta.instrumentType == DrumPieceType::china, "salamander china type");
+            ok &= expectEqual (meta.articulation == "Center", "salamander china art");
+        }
+
+        {
             const auto meta = parser.parseFile (juce::File ("FloorTom2_Center_hard_rr2.wav"));
             ok &= expectEqual (meta.instrumentType == DrumPieceType::floorTom, "floor tom type");
             ok &= expectEqual (meta.instrumentIndex == 1, "floor tom index");

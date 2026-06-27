@@ -51,7 +51,11 @@ juce::String DemoKitSampleBindings::sampleFileNameFor (DrumPieceType type, const
         case DrumPieceType::floorTom: return "floor_tom_" + artSlug + ".wav";
         case DrumPieceType::hiHat:    return "hihat_" + artSlug + ".wav";
         case DrumPieceType::crash:    return "crash_" + artSlug + ".wav";
-        case DrumPieceType::ride:     return "ride_" + artSlug + ".wav";
+        case DrumPieceType::ride:
+            if (artSlug == "edge" || artSlug == "bow")
+                return "ride_bow.wav";
+
+            return "ride_" + artSlug + ".wav";
         default:                      return "drum_" + artSlug + ".wav";
     }
 }

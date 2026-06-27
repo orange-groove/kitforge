@@ -15,11 +15,28 @@ struct Articulation
 
     SampleLayer* findLayerForVelocity (int velocity)
     {
+        if (layers.empty())
+            return nullptr;
+
+        SampleLayer* highest = nullptr;
+        SampleLayer* lowest = nullptr;
+
         for (auto& layer : layers)
+        {
             if (layer.containsVelocity (velocity))
                 return &layer;
 
-        return layers.empty() ? nullptr : &layers.back();
+            if (highest == nullptr || layer.maxVelocity > highest->maxVelocity)
+                highest = &layer;
+
+            if (lowest == nullptr || layer.minVelocity < lowest->minVelocity)
+                lowest = &layer;
+        }
+
+        // Velocity falls outside every layer's range (e.g. layers cap at 123 but
+        // we trigger at 127): clamp to the nearest edge layer instead of whatever
+        // happened to be added last.
+        return velocity > highest->maxVelocity ? highest : lowest;
     }
 
     const SampleLayer* findLayerForVelocity (int velocity) const

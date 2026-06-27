@@ -10,6 +10,9 @@ struct ArticulationRef
     Articulation* articulation = nullptr;
 };
 
+/** Ensures standard articulations exist (e.g. ride Edge + Bell). */
+void ensureStandardArticulations (DrumPiece& piece);
+
 class KitModel
 {
 public:
@@ -48,13 +51,16 @@ public:
     /** Resolves relative sample paths and fixes broken absolute paths against a kit root folder. */
     void resolveSamplePaths (const juce::File& kitRoot);
 
+    /** Collapses ride pieces to Edge + Bell articulations (safe to call repeatedly). */
+    void normalizeStandardArticulations();
+
     void createDefaultKit (float canvasWidth, float canvasHeight);
 
     int suggestNextMidiNote() const;
     bool isMidiNoteInUse (int note, const juce::String& ignorePieceId = {}) const;
 
     // Sample assignment helpers
-    void assignSingleSample (DrumPiece& piece, const juce::File& file, const juce::String& articulationName = {});
+    void assignSingleSample (DrumPiece& piece, const juce::File& file, const juce::String& targetArticulationId = {});
     void addVelocityLayer (DrumPiece& piece, int minVelocity, int maxVelocity, const juce::File& file);
     void addRoundRobinSample (DrumPiece& piece, const juce::String& layerId, const juce::File& file);
 

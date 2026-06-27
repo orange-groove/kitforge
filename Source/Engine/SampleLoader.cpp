@@ -1,4 +1,6 @@
 #include "SampleLoader.h"
+#include <atomic>
+#include <thread>
 
 SampleLoader::SampleLoader()
 {
@@ -10,16 +12,28 @@ void SampleLoader::prepare (double sampleRate)
     targetSampleRate = sampleRate;
 }
 
+const LoadedSample* SampleLoader::getCached (const juce::String& filePath) const
+{
+    if (filePath.isEmpty())
+        return nullptr;
+
+    const auto it = cache.find (filePath.toStdString());
+
+    if (it != cache.end())
+        return it->second.get();
+
+    return nullptr;
+}
+
 const LoadedSample* SampleLoader::load (const juce::String& filePath)
 {
     if (filePath.isEmpty())
         return nullptr;
 
-    const auto key = filePath.toStdString();
-    const auto it = cache.find (key);
+    if (const auto* cached = getCached (filePath))
+        return cached;
 
-    if (it != cache.end())
-        return it->second.get();
+    const auto key = filePath.toStdString();
 
     const juce::File file (filePath);
 
@@ -34,6 +48,62 @@ const LoadedSample* SampleLoader::load (const juce::String& filePath)
     const auto* ptr = loaded.get();
     cache[key] = std::move (loaded);
     return ptr;
+}
+
+void SampleLoader::loadMany (const juce::StringArray& filePaths)
+{
+    std::vector<juce::String> todo;
+    todo.reserve ((size_t) filePaths.size());
+
+    for (const auto& path : filePaths)
+    {
+        if (path.isEmpty())
+            continue;
+
+        if (cache.find (path.toStdString()) == cache.end())
+            todo.push_back (path);
+    }
+
+    if (todo.empty())
+        return;
+
+    // Decode in parallel; cache map is touched only on this thread afterwards.
+    std::vector<std::unique_ptr<LoadedSample>> decoded (todo.size());
+    std::atomic<size_t> next { 0 };
+
+    const auto worker = [&]()
+    {
+        for (;;)
+        {
+            const size_t i = next.fetch_add (1);
+
+            if (i >= todo.size())
+                return;
+
+            const juce::File file (todo[i]);
+
+            if (file.existsAsFile())
+                decoded[i] = decodeFile (file);
+        }
+    };
+
+    const int hw = (int) std::thread::hardware_concurrency();
+    const int numThreads = juce::jlimit (1, 8, hw > 0 ? hw : 4);
+
+    std::vector<std::thread> threads;
+    threads.reserve ((size_t) numThreads - 1);
+
+    for (int t = 0; t < numThreads - 1; ++t)
+        threads.emplace_back (worker);
+
+    worker();
+
+    for (auto& th : threads)
+        th.join();
+
+    for (size_t i = 0; i < todo.size(); ++i)
+        if (decoded[i] != nullptr)
+            cache[todo[i].toStdString()] = std::move (decoded[i]);
 }
 
 void SampleLoader::unloadAll()

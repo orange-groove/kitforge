@@ -14,6 +14,7 @@ int SFZScanner::scoreFileName (const juce::String& fileName)
     const auto lower = fileName.toLowerCase();
     int score = 0;
 
+    if (lower == "all")            score += 45;
     if (lower.contains ("drum"))   score += 40;
     if (lower.contains ("kit"))    score += 35;
     if (lower.contains ("gm"))     score += 25;
