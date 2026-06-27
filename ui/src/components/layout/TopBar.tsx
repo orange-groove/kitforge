@@ -59,9 +59,6 @@ export function TopBar({
         <Button size="sm" variant="outline" borderColor="kit.border" onClick={() => kitforgeBridge.loadKit()}>
           Load
         </Button>
-        <Button size="sm" variant="outline" borderColor="kit.border" onClick={() => kitforgeBridge.importSfz()}>
-          Import SFZ
-        </Button>
       </HStack>
     </Flex>
   );

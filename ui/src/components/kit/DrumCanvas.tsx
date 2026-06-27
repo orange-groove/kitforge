@@ -738,7 +738,7 @@ export function DrumCanvas({
                   y={isRide ? cy - r * 0.42 : cy - 4}
                   textAnchor="middle"
                   fill={labelColor}
-                  fontSize={Math.max(11, r * 0.22)}
+                  fontSize={Math.max(8, r * 0.15)}
                   fontWeight={600}
                   style={{ pointerEvents: "none", userSelect: "none" }}
                 >

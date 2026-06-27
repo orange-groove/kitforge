@@ -29,9 +29,6 @@ export function LibraryBrowserPanel({ installed, onMapLibrary }: LibraryBrowserP
         <Button size="sm" variant="outline" borderColor="kit.border" onClick={() => kitforgeBridge.importLooseFolder()}>
           Import Folder
         </Button>
-        <Button size="sm" variant="outline" borderColor="kit.border" onClick={() => kitforgeBridge.installKitforge()}>
-          Install .kitforge
-        </Button>
       </Flex>
 
       <Stack spacing={3}>
@@ -102,7 +99,7 @@ export function LibraryBrowserPanel({ installed, onMapLibrary }: LibraryBrowserP
         ))}
         {installed.length === 0 && (
           <Text fontSize="sm" color="kit.textMuted">
-            No installed kits yet. Import SFZ, a WAV folder, or install a .kitforge package.
+            No installed kits yet. Import an SFZ or a WAV folder to get started.
           </Text>
         )}
       </Stack>
