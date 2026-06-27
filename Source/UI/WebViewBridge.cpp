@@ -6,6 +6,10 @@
 #include "../Serialization/KitSerializer.h"
 #include "../Serialization/KitForgePackageReader.h"
 #include "../Importers/SampleLibraryMapper.h"
+#include "../Importers/SampleSwapService.h"
+#include "../Models/SampleIndexService.h"
+#include "../Models/KitValidationService.h"
+#include "../Models/SampleSet.h"
 #include "../Models/InstalledLibrary.h"
 #include "../Models/DrumPieceTypes.h"
 #include "../Core/KitForgePaths.h"
@@ -297,6 +301,10 @@ void WebViewBridge::dispatchMessage (const juce::var& message)
     else if (type == "revealKit")                 handleRevealKit (message);
     else if (type == "getLibraryMapping")         handleGetLibraryMapping (message);
     else if (type == "applyLibraryMapping")       handleApplyLibraryMapping (message);
+    else if (type == "searchSampleSets")          handleSearchSampleSets (message);
+    else if (type == "previewSampleSet")          handlePreviewSampleSet (message);
+    else if (type == "swapSampleSet")             handleSwapSampleSet (message);
+    else if (type == "rebuildSampleIndex")        handleRebuildSampleIndex (message);
     else if (type == "aiBuildKit")                handleAiBuildKit (message);
     else                                          sendError ("Unknown message type: " + type);
 }
@@ -693,6 +701,9 @@ void WebViewBridge::handleLoadInstalledKit (const juce::var& message)
                 }
             }
 
+            // Fill any cross-library sampleRefs that didn't resolve against this kit root.
+            processor.getServices().getSampleIndexService().resolveKitSampleRefs (processor.getKitModel());
+
             KitModelBuilder::pruneMixedVoices (processor.getKitModel());
             applyImportKitLayout (processor.getKitModel(), 980.0f, 680.0f);
         }
@@ -700,6 +711,7 @@ void WebViewBridge::handleLoadInstalledKit (const juce::var& message)
         processor.rebuildEngine();
         processor.getKitModel().notifyChanged();
         pushKitState();
+        sendKitValidation();
     });
 }
 
@@ -894,6 +906,211 @@ void WebViewBridge::handleApplyLibraryMapping (const juce::var& message)
     }
 
     sendLibraryApplied (*this, libraryId, libraryName, applied);
+}
+
+void WebViewBridge::sendKitValidation()
+{
+    KitValidationReport report;
+
+    {
+        const juce::ScopedLock lock (processor.getModelLock());
+        report = KitValidationService::validateKit (processor.getKitModel(),
+                                                    processor.getServices().getSampleIndexService());
+    }
+
+    if (! report.hasIssues())
+        return;
+
+    auto msg = messageWithType ("validationState");
+    msg.getDynamicObject()->setProperty ("report", report.toVar());
+    sendToWeb (msg);
+}
+
+void WebViewBridge::sendSampleIndexState()
+{
+    auto& service = processor.getServices().getSampleIndexService();
+
+    auto msg = messageWithType ("sampleIndexState");
+    msg.getDynamicObject()->setProperty ("sampleSetCount", service.getSampleSetCount());
+    msg.getDynamicObject()->setProperty ("libraryCount", service.getLibraryCount());
+    msg.getDynamicObject()->setProperty ("missingSampleCount", service.getMissingSampleCount());
+    sendToWeb (msg);
+}
+
+void WebViewBridge::handleSearchSampleSets (const juce::var& message)
+{
+    SampleSetQuery query;
+
+    if (auto* q = message.getProperty ("query", {}).getDynamicObject())
+    {
+        query.instrumentType = q->getProperty ("instrumentType").toString();
+        query.articulation   = q->getProperty ("articulation").toString();
+        query.libraryId      = q->getProperty ("libraryId").toString();
+        query.text           = q->getProperty ("text").toString();
+        query.minVelocityLayers = (int) q->getProperty ("minVelocityLayers");
+        query.minRoundRobins    = (int) q->getProperty ("minRoundRobins");
+
+        if (auto* tagsArr = q->getProperty ("tags").getArray())
+            for (const auto& t : *tagsArr)
+                query.tags.add (t.toString());
+    }
+
+    juce::Thread::launch ([this, query]
+    {
+        auto& service = processor.getServices().getSampleIndexService();
+        service.rebuildIfStale();
+        const auto results = service.searchSampleSets (query);
+
+        juce::Array<juce::var> resultVars;
+        for (const auto& set : results)
+            resultVars.add (set.toVar());
+
+        juce::MessageManager::callAsync ([this, resultVars]
+        {
+            auto msg = messageWithType ("sampleSetSearchResults");
+            msg.getDynamicObject()->setProperty ("results", resultVars);
+            sendToWeb (msg);
+            sendSampleIndexState();
+        });
+    });
+}
+
+void WebViewBridge::handlePreviewSampleSet (const juce::var& message)
+{
+    const auto sampleSetId = message.getProperty ("sampleSetId", {}).toString();
+
+    if (sampleSetId.isEmpty())
+        return;
+
+    juce::Thread::launch ([this, sampleSetId]
+    {
+        auto& service = processor.getServices().getSampleIndexService();
+        service.rebuildIfStale();
+
+        juce::String absPath;
+
+        if (const auto set = service.findSampleSetById (sampleSetId))
+        {
+            if (auto resolved = service.resolveSampleRef (set->previewSampleRef))
+                if (resolved->exists)
+                    absPath = resolved->absoluteFilePath;
+
+            // Fall back to the first sample's absolute path if the ref didn't resolve.
+            if (absPath.isEmpty())
+                for (const auto& layer : set->layers)
+                    if (! layer.roundRobins.samples.empty())
+                    {
+                        absPath = layer.roundRobins.samples.front().filePath;
+                        break;
+                    }
+        }
+
+        if (absPath.isEmpty())
+            return;
+
+        juce::MessageManager::callAsync ([this, absPath]
+        {
+            processor.previewSampleFile (absPath, 110.0f);
+        });
+    });
+}
+
+void WebViewBridge::handleSwapSampleSet (const juce::var& message)
+{
+    const auto sampleSetId = message.getProperty ("sampleSetId", {}).toString();
+    const auto targetVar = message.getProperty ("target", {});
+
+    SampleSwapService::Target target;
+    target.pieceId        = targetVar.getProperty ("pieceId", {}).toString();
+    target.articulationId = targetVar.getProperty ("articulationId", {}).toString();
+    target.layerId        = targetVar.getProperty ("layerId", {}).toString();
+
+    const auto modeStr = targetVar.getProperty ("mode", "articulation").toString();
+    if (modeStr == "piece")       target.mode = SampleSwapService::Mode::piece;
+    else if (modeStr == "layer")  target.mode = SampleSwapService::Mode::layer;
+    else                          target.mode = SampleSwapService::Mode::articulation;
+
+    SampleSwapService::Options options;
+    if (auto* opt = message.getProperty ("options", {}).getDynamicObject())
+    {
+        options.useSourceName = (bool) opt->getProperty ("useSourceName");
+        options.useSourceMidi = (bool) opt->getProperty ("useSourceMidi");
+        options.useSourceVelocityRanges = (bool) opt->getProperty ("useSourceVelocityRanges");
+    }
+
+    if (sampleSetId.isEmpty() || target.pieceId.isEmpty())
+    {
+        auto msg = messageWithType ("sampleSwapFailed");
+        msg.getDynamicObject()->setProperty ("message", "Missing swap target or sample set.");
+        sendToWeb (msg);
+        return;
+    }
+
+    sendBusy ("Swapping samples…");
+
+    juce::Thread::launch ([this, sampleSetId, target, options]
+    {
+        auto& service = processor.getServices().getSampleIndexService();
+        service.rebuildIfStale();
+
+        const auto found = service.findSampleSetById (sampleSetId);
+
+        if (! found.has_value())
+        {
+            juce::MessageManager::callAsync ([this]
+            {
+                auto msg = messageWithType ("sampleSwapFailed");
+                msg.getDynamicObject()->setProperty ("message", "Selected sample set is no longer available.");
+                sendToWeb (msg);
+            });
+            return;
+        }
+
+        const SampleSet set = *found; // copy so we can mutate the model on the message thread
+
+        juce::MessageManager::callAsync ([this, set, target, options]
+        {
+            SampleSwapService::Result result;
+
+            {
+                const juce::ScopedLock lock (processor.getModelLock());
+                result = SampleSwapService::swap (processor.getKitModel(), set, target, options);
+
+                if (result.success)
+                    processor.getServices().getSampleIndexService().resolveKitSampleRefs (processor.getKitModel());
+            }
+
+            if (! result.success)
+            {
+                auto msg = messageWithType ("sampleSwapFailed");
+                msg.getDynamicObject()->setProperty ("message", result.errorMessage);
+                sendToWeb (msg);
+                return;
+            }
+
+            processor.rebuildEngine();
+            processor.getKitModel().notifyChanged();
+            pushKitState();
+
+            auto msg = messageWithType ("sampleSwapCompleted");
+            msg.getDynamicObject()->setProperty ("pieceId", target.pieceId);
+            msg.getDynamicObject()->setProperty ("articulationId", target.articulationId);
+            msg.getDynamicObject()->setProperty ("sampleSetId", set.id);
+            sendToWeb (msg);
+
+            sendKitValidation();
+        });
+    });
+}
+
+void WebViewBridge::handleRebuildSampleIndex (const juce::var&)
+{
+    juce::Thread::launch ([this]
+    {
+        processor.getServices().getSampleIndexService().rebuildIndex();
+
+        juce::MessageManager::callAsync ([this] { sendSampleIndexState(); });
+    });
 }
 
 void WebViewBridge::handleAiBuildKit (const juce::var& message)

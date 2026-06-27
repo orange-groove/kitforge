@@ -4,7 +4,7 @@ import { TopBar } from "./TopBar";
 import { SidePanel } from "./SidePanel";
 import { DrumCanvas } from "../kit/DrumCanvas";
 import { KitInspector } from "../kit/KitInspector";
-import type { DrumPiece, InstalledKit, KitModel } from "../../types/kit";
+import type { DrumPiece, InstalledKit, KitModel, SwapTarget } from "../../types/kit";
 
 interface AppShellProps {
   kit: KitModel;
@@ -13,6 +13,7 @@ interface AppShellProps {
   aiMessage: string | null;
   onAiGenerate: () => void;
   onMapLibrary: (kitId: string) => void;
+  onSwapSamples: (target: SwapTarget) => void;
 }
 
 export function AppShell({
@@ -22,6 +23,7 @@ export function AppShell({
   aiMessage,
   onAiGenerate,
   onMapLibrary,
+  onSwapSamples,
 }: AppShellProps) {
   const [tabIndex, setTabIndex] = useState(0);
   const [editLayout, setEditLayout] = useState(false);
@@ -75,6 +77,7 @@ export function AppShell({
             selectedPieceId={selectedId}
             selectedArticulationId={selectedArticulationId}
             editLayout={editLayout}
+            onSwapSamples={onSwapSamples}
             onSelectPiece={(pieceId, articulationId) => {
               setSelectedId(pieceId);
               if (pieceId == null) {
@@ -105,6 +108,7 @@ export function AppShell({
             piece={selectedPiece}
             selectedArticulationId={selectedArticulationId}
             onSelectArticulation={setSelectedArticulationId}
+            onSwapSamples={onSwapSamples}
           />
         </Box>
       </Flex>

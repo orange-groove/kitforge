@@ -106,7 +106,11 @@ void DrumSamplerEngine::processPendingTriggers (const KitModel& model)
 
     for (const auto& trigger : ready)
     {
-        if (trigger.usePieceId)
+        if (trigger.isPreview)
+        {
+            playPreview (trigger.previewPath, trigger.velocity);
+        }
+        else if (trigger.usePieceId)
         {
             if (trigger.articulationId.isNotEmpty())
                 triggerPieceArticulation (model, trigger.pieceId, trigger.articulationId, trigger.velocity);
@@ -171,6 +175,34 @@ void DrumSamplerEngine::queueTriggerArticulation (const juce::String& pieceId,
 {
     const juce::ScopedLock lock (triggerLock);
     pendingTriggers.push_back ({ 0, velocity, pieceId, articulationId, true });
+}
+
+void DrumSamplerEngine::queuePreviewFile (const juce::String& absolutePath, float velocity)
+{
+    if (absolutePath.isEmpty())
+        return;
+
+    PendingTrigger trigger;
+    trigger.velocity = velocity;
+    trigger.isPreview = true;
+    trigger.previewPath = absolutePath;
+
+    const juce::ScopedLock lock (triggerLock);
+    pendingTriggers.push_back (std::move (trigger));
+}
+
+void DrumSamplerEngine::playPreview (const juce::String& absolutePath, float velocity)
+{
+    const auto* loaded = sampleLoader.getCached (absolutePath);
+
+    if (loaded == nullptr)
+        return;
+
+    DrumSample sample;
+    sample.filePath = absolutePath;
+
+    if (auto* voice = allocateVoice())
+        voice->start (loaded, sample, velocity, 1.0f, 0.0f, 1.0f, {}, hostSampleRate);
 }
 
 void DrumSamplerEngine::playArticulation (const DrumPiece& piece, const Articulation& art, float velocity)

@@ -14,7 +14,7 @@ import {
   ModalFooter,
   Input,
 } from "@chakra-ui/react";
-import type { DrumPiece, KitModel } from "../../types/kit";
+import type { DrumPiece, KitModel, SwapTarget } from "../../types/kit";
 import { kitforgeBridge } from "../../bridge/kitforgeBridge";
 import kickSvgRaw from "../../assets/kick.svg?raw";
 
@@ -45,9 +45,58 @@ interface DrumCanvasProps {
   selectedArticulationId: string | null;
   editLayout: boolean;
   onSelectPiece: (pieceId: string | null, articulationId?: string | null) => void;
+  onSwapSamples: (target: SwapTarget) => void;
 }
 
 const CLICK_SLOP_PX = 6;
+
+const DRUM_RIM_COLOR = "#231f20";
+const DRUM_SELECTED_RIM_COLOR = "#5b8def";
+
+/**
+ * Inline render of `assets/drum.svg` so the head and rim can be recolored at
+ * runtime. The lug hardware is fixed; `headFill` reflects the hit/rest state and
+ * `rimFill` turns blue when the piece is selected.
+ */
+function DrumGraphic({
+  x,
+  y,
+  size,
+  headFill,
+  rimFill,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  headFill: string;
+  rimFill: string;
+}) {
+  return (
+    <svg
+      x={x}
+      y={y}
+      width={size}
+      height={size}
+      viewBox="0 0 160.79 160.79"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ pointerEvents: "none", overflow: "visible" }}
+    >
+      <g fill="#fff" stroke="#231f20" strokeMiterlimit={10}>
+        <circle cx="80.24" cy="5.28" r="3.25" />
+        <circle cx="80.55" cy="155.51" r="3.25" />
+        <circle cx="5.28" cy="80.55" r="3.25" />
+        <circle cx="155.51" cy="80.24" r="3.25" />
+        <path d="M29.47,29.69c-1.27,1.27-3.33,1.27-4.6,0s-1.27-3.33,0-4.6c1.27-1.26,3.33-1.26,4.6,0,1.27,1.27,1.27,3.33,0,4.6Z" />
+        <path d="M135.92,135.7c-1.27,1.27-3.33,1.27-4.6,0s-1.27-3.33,0-4.6,3.33-1.27,4.6,0c1.27,1.27,1.27,3.33,0,4.6Z" />
+        <path d="M29.69,135.92c-1.27,1.27-3.33,1.27-4.6,0s-1.27-3.33,0-4.6c1.27-1.27,3.33-1.27,4.6,0,1.27,1.27,1.27,3.33,0,4.6Z" />
+        <path d="M135.69,29.47c-1.26,1.27-3.32,1.27-4.59,0-1.27-1.27-1.27-3.33,0-4.6s3.33-1.27,4.59,0c1.27,1.27,1.27,3.33,0,4.6Z" />
+        <path d="M150.42,68.7c-.33,0-.65.02-.97.06-1.78-10.67-5.97-20.52-12-28.97.25-.19.5-.41.73-.64,3.85-3.86,3.27-10.68-1.29-15.25-4.57-4.57-11.39-5.14-15.25-1.29-.23.23-.45.48-.64.73-8.45-6.03-18.3-10.22-28.97-12,.04-.32.06-.64.06-.97,0-5.45-5.24-9.87-11.7-9.87s-11.69,4.42-11.69,9.87c0,.33.02.65.06.97-10.67,1.77-20.52,5.97-28.98,12-.19-.25-.41-.5-.64-.73-3.85-3.85-10.67-3.28-15.24,1.29-4.57,4.57-5.15,11.39-1.29,15.25.23.23.47.44.72.64-6.03,8.45-10.22,18.3-12,28.97-.32-.04-.64-.06-.97-.06-5.44,0-9.86,5.24-9.86,11.7s4.42,11.69,9.86,11.69c.33,0,.65-.02.97-.06,1.78,10.67,5.97,20.52,12,28.98-.25.2-.49.41-.72.64-3.86,3.85-3.28,10.67,1.29,15.24s11.39,5.15,15.24,1.29c.23-.23.44-.47.64-.72,8.46,6.03,18.31,10.23,28.98,12-.04.32-.06.64-.06.97,0,5.44,5.23,9.86,11.69,9.86s11.7-4.42,11.7-9.86c0-.33-.02-.65-.06-.97,10.67-1.78,20.52-5.97,28.97-12,.2.25.41.49.64.72,3.86,3.86,10.68,3.28,15.25-1.29,4.56-4.57,5.14-11.39,1.29-15.24-.23-.23-.48-.45-.73-.64,6.03-8.46,10.22-18.31,12-28.98.32.04.64.06.97.06,5.45,0,9.87-5.24,9.87-11.69s-4.42-11.7-9.87-11.7ZM5.28,83.8c-1.8,0-3.25-1.45-3.25-3.25s1.45-3.25,3.25-3.25,3.25,1.46,3.25,3.25-1.46,3.25-3.25,3.25ZM24.87,25.09c1.27-1.26,3.33-1.26,4.6,0,1.27,1.27,1.27,3.33,0,4.6-1.27,1.27-3.33,1.27-4.6,0s-1.27-3.33,0-4.6ZM29.69,135.92c-1.27,1.27-3.33,1.27-4.6,0s-1.27-3.33,0-4.6c1.27-1.27,3.33-1.27,4.6,0,1.27,1.27,1.27,3.33,0,4.6ZM80.24,2.03c1.79,0,3.25,1.46,3.25,3.25s-1.46,3.25-3.25,3.25-3.25-1.45-3.25-3.25,1.45-3.25,3.25-3.25ZM80.55,158.76c-1.79,0-3.25-1.45-3.25-3.25s1.46-3.25,3.25-3.25,3.25,1.46,3.25,3.25-1.46,3.25-3.25,3.25ZM131.1,24.87c1.27-1.27,3.33-1.27,4.59,0,1.27,1.27,1.27,3.33,0,4.6-1.26,1.27-3.32,1.27-4.59,0-1.27-1.27-1.27-3.33,0-4.6ZM135.92,135.7c-1.27,1.27-3.33,1.27-4.6,0s-1.27-3.33,0-4.6,3.33-1.27,4.6,0c1.27,1.27,1.27,3.33,0,4.6ZM155.51,83.49c-1.8,0-3.25-1.46-3.25-3.25s1.45-3.25,3.25-3.25,3.25,1.45,3.25,3.25-1.46,3.25-3.25,3.25Z" />
+      </g>
+      <circle cx="80.24" cy="80.24" r="67.5" fill={rimFill} stroke={rimFill} strokeMiterlimit={10} />
+      <circle cx="80.55" cy="80.55" r="64.35" fill={headFill} />
+    </svg>
+  );
+}
 
 type PendingInteraction = {
   pointerId: number;
@@ -65,6 +114,7 @@ export function DrumCanvas({
   selectedArticulationId,
   editLayout,
   onSelectPiece,
+  onSwapSamples,
 }: DrumCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -90,6 +140,35 @@ export function DrumCanvas({
     },
     [],
   );
+
+  const [hitPieceIds, setHitPieceIds] = useState<Set<string>>(() => new Set());
+  const hitTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const flashHit = useCallback((pieceId: string) => {
+    setHitPieceIds((prev) => {
+      const next = new Set(prev);
+      next.add(pieceId);
+      return next;
+    });
+    const existing = hitTimers.current[pieceId];
+    if (existing) clearTimeout(existing);
+    hitTimers.current[pieceId] = setTimeout(() => {
+      setHitPieceIds((prev) => {
+        if (!prev.has(pieceId)) return prev;
+        const next = new Set(prev);
+        next.delete(pieceId);
+        return next;
+      });
+      delete hitTimers.current[pieceId];
+    }, 200);
+  }, []);
+
+  useEffect(() => {
+    const timers = hitTimers.current;
+    return () => {
+      Object.values(timers).forEach((t) => clearTimeout(t));
+    };
+  }, []);
 
   const [menuPiece, setMenuPiece] = useState<DrumPiece | null>(null);
   const [menuArticulationId, setMenuArticulationId] = useState<string | null>(null);
@@ -254,11 +333,13 @@ export function DrumCanvas({
         if (!articulationId) return;
 
         onSelectPiece(piece.id, articulationId);
+        flashHit(piece.id);
         kitforgeBridge.triggerPiece(piece.id, articulationId);
         return;
       }
 
       onSelectPiece(piece.id, null);
+      flashHit(piece.id);
       kitforgeBridge.triggerPiece(piece.id);
     };
   };
@@ -288,6 +369,7 @@ export function DrumCanvas({
       );
       if (articulationId) {
         onSelectPiece(piece.id, articulationId);
+        flashHit(piece.id);
         kitforgeBridge.triggerPiece(piece.id, articulationId);
         const ridePieceId = piece.id;
         onClick = () => {
@@ -438,6 +520,11 @@ export function DrumCanvas({
             <stop offset="55%" stopColor="#1c1c1c" />
             <stop offset="100%" stopColor="#141414" />
           </radialGradient>
+          <radialGradient id="kitforge-drumhead-hit" cx="50%" cy="42%" r="62%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="55%" stopColor="#ededed" />
+            <stop offset="100%" stopColor="#c8c8c8" />
+          </radialGradient>
         </defs>
 
         <rect x={0} y={0} width={size.w} height={size.h} fill="url(#kitforge-canvas-bg)" />
@@ -447,6 +534,7 @@ export function DrumCanvas({
             const displayPiece = pieceForDisplay(piece);
             const { cx, cy, r } = pieceCircleGeometry(displayPiece, refW, refH);
             const selected = selectedPieceId === piece.id;
+            const hit = hitPieceIds.has(piece.id);
             const cymbal = isCymbalPiece(piece);
             const kick = isKickPiece(piece);
             const isRide = isRidePiece(piece);
@@ -458,8 +546,6 @@ export function DrumCanvas({
               selected && edgeArt != null && selectedArticulationId === edgeArt.id;
             const fill = argbToCss(piece.color);
             const labelColor = cymbal ? "#f0f0f0" : "#111111";
-            const rimPx = 4;
-            const drumInnerR = Math.max(r * 0.84, r - rimPx / viewport.zoom);
             const strokeW = (w: number) => w / viewport.zoom;
             const selectionPad = strokeW(2);
             const edgeMidi = edgeArt?.midiNote ?? piece.primaryMidiNote;
@@ -527,7 +613,7 @@ export function DrumCanvas({
                   />
                 )}
 
-                {selected && !isRide && !kick && (
+                {selected && cymbal && !isRide && (
                   <circle
                     cx={cx}
                     cy={cy}
@@ -563,16 +649,13 @@ export function DrumCanvas({
                     style={{ pointerEvents: "none" }}
                   />
                 ) : !cymbal ? (
-                  <>
-                    <circle cx={cx} cy={cy} r={r} fill="#000000" />
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={drumInnerR}
-                      fill={fill}
-                      style={{ pointerEvents: "none" }}
-                    />
-                  </>
+                  <DrumGraphic
+                    x={cx - r}
+                    y={cy - r}
+                    size={2 * r}
+                    headFill={hit ? "url(#kitforge-drumhead-hit)" : fill}
+                    rimFill={selected ? DRUM_SELECTED_RIM_COLOR : DRUM_RIM_COLOR}
+                  />
                 ) : (
                   <>
                     <circle
@@ -761,6 +844,22 @@ export function DrumCanvas({
               label: "Assign Sample",
               action: () => {
                 kitforgeBridge.assignSample(menuPiece.id, menuArticulationId ?? "");
+              },
+            },
+            {
+              label: "Swap Samples",
+              action: () => {
+                const art =
+                  menuPiece.articulations.find((a) => a.id === menuArticulationId) ??
+                  menuPiece.articulations[0];
+                onSwapSamples({
+                  pieceId: menuPiece.id,
+                  articulationId: art?.id,
+                  instrumentType: menuPiece.type,
+                  articulationName: art?.name,
+                  pieceName: menuPiece.name,
+                  mode: "articulation",
+                });
               },
             },
             { label: "Rename", action: () => openRename(menuPiece) },

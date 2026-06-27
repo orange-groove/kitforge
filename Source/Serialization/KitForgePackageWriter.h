@@ -8,6 +8,12 @@
 class KitForgePackageWriter
 {
 public:
+    enum class ReferenceMode
+    {
+        selfContained, // copy every used sample into the package (portable)
+        referenced     // keep sampleRefs; depend on installed libraries (small)
+    };
+
     struct WriteOptions
     {
         juce::String packageId;
@@ -21,6 +27,10 @@ public:
         juce::File artworkFile;
         juce::File previewAudioFile;
         bool generatePlaceholderLicense = true;
+        ReferenceMode referenceMode = ReferenceMode::selfContained;
+
+        /** Library metadata (id/name/license) used to credit dependencies. */
+        std::vector<KitDependency> dependencyCatalog;
     };
 
     struct WriteResult

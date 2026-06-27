@@ -78,6 +78,10 @@ juce::var KitPackageJsonSerializer::kitToPackageVar (const KitModel& kit, const 
                     auto* sampleObj = new juce::DynamicObject();
                     sampleObj->setProperty ("id", sample.id);
                     sampleObj->setProperty ("samplePath", sample.filePath);
+
+                    if (sample.sampleRef.hasRef())
+                        sampleObj->setProperty ("sampleRef", sample.sampleRef.toVar());
+
                     sampleObj->setProperty ("rootMidiNote", sample.rootMidiNote);
                     sampleObj->setProperty ("gain", sample.gain);
                     sampleObj->setProperty ("pan", sample.pan);
@@ -227,6 +231,9 @@ void KitPackageJsonSerializer::kitFromPackageVar (KitModel& model, const juce::v
 
                                                             if (sample.filePath.isEmpty())
                                                                 sample.filePath = sampleObj->getProperty ("filePath").toString();
+
+                                                            if (sampleObj->hasProperty ("sampleRef"))
+                                                                sample.sampleRef = SampleRef::fromVar (sampleObj->getProperty ("sampleRef"));
 
                                                             sample.rootMidiNote = (int) sampleObj->getProperty ("rootMidiNote");
                                                             sample.gain = (float) sampleObj->getProperty ("gain");

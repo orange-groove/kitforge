@@ -71,6 +71,12 @@ private:
     void handleRevealKit (const juce::var& message);
     void handleGetLibraryMapping (const juce::var& message);
     void handleApplyLibraryMapping (const juce::var& message);
+    void handleSearchSampleSets (const juce::var& message);
+    void handlePreviewSampleSet (const juce::var& message);
+    void handleSwapSampleSet (const juce::var& message);
+    void handleRebuildSampleIndex (const juce::var& message);
+    void sendSampleIndexState();
+    void sendKitValidation();
     void handleAiBuildKit (const juce::var& message);
 
     void onModelChanged();

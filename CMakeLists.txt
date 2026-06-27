@@ -73,6 +73,8 @@ target_sources(KitForge
         Source/Core/KitImportService.cpp
         Source/Models/KitModel.cpp
         Source/Models/SampleIndex.cpp
+        Source/Models/SampleIndexService.cpp
+        Source/Models/KitValidationService.cpp
         Source/Models/InstalledLibrary.cpp
         Source/Engine/SampleLoader.cpp
         Source/Engine/DrumVoice.cpp
@@ -95,6 +97,7 @@ target_sources(KitForge
         Source/Importers/SFZScanner.cpp
         Source/Importers/ImportResult.cpp
         Source/Importers/SampleLibraryMapper.cpp
+        Source/Importers/SampleSwapService.cpp
         Source/Tests/SampleNameParserTests.cpp
         Source/AI/KitRecipe.cpp
         Source/AI/KitRecipeValidator.cpp

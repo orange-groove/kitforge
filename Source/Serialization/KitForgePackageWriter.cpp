@@ -1,6 +1,7 @@
 #include "KitForgePackageWriter.h"
 #include "KitPackageJsonSerializer.h"
 #include "ManifestSerializer.h"
+#include <map>
 
 namespace
 {
@@ -139,6 +140,18 @@ KitForgePackageWriter::WriteResult KitForgePackageWriter::writeFolder (const Kit
     kitCopy.importContents (kit);
     kitCopy.kitName = options.kitName;
 
+    const bool selfContained = options.referenceMode == ReferenceMode::selfContained;
+
+    // Tally dependency usage per source library (from sampleRefs) for credits.
+    std::map<juce::String, int> libraryUsage;
+
+    for (const auto& piece : kitCopy.getPieces())
+        for (const auto& art : piece.articulations)
+            for (const auto& layer : art.layers)
+                for (const auto& sample : layer.roundRobins.samples)
+                    if (sample.sampleRef.libraryId.isNotEmpty())
+                        ++libraryUsage[sample.sampleRef.libraryId];
+
     juce::HashMap<juce::String, int> usedNames;
     juce::HashMap<juce::String, juce::String> copiedSourcePaths;
     juce::StringArray pieceIds;
@@ -161,6 +174,12 @@ KitForgePackageWriter::WriteResult KitForgePackageWriter::writeFolder (const Kit
             {
                 for (auto& sample : layer.roundRobins.samples)
                 {
+                    if (! selfContained)
+                    {
+                        // Referenced mode: keep the sampleRef, do not copy audio.
+                        continue;
+                    }
+
                     const juce::File sourceFile (sample.filePath);
 
                     if (! sourceFile.existsAsFile())
@@ -171,6 +190,8 @@ KitForgePackageWriter::WriteResult KitForgePackageWriter::writeFolder (const Kit
                     if (copiedSourcePaths.contains (sourceKey))
                     {
                         sample.filePath = copiedSourcePaths[sourceKey];
+                        sample.sampleRef.relativePath = sample.filePath;
+                        sample.sampleRef.sourceType = SampleRef::SourceType::embedded;
                         continue;
                     }
 
@@ -190,6 +211,8 @@ KitForgePackageWriter::WriteResult KitForgePackageWriter::writeFolder (const Kit
 
                     const auto relativePath = "samples/" + subfolder + "/" + destName;
                     sample.filePath = relativePath;
+                    sample.sampleRef.relativePath = relativePath;
+                    sample.sampleRef.sourceType = SampleRef::SourceType::embedded;
                     copiedSourcePaths.set (sourceKey, relativePath);
                 }
             }
@@ -236,6 +259,27 @@ KitForgePackageWriter::WriteResult KitForgePackageWriter::writeFolder (const Kit
     manifest.sampleCount = KitPackageJsonSerializer::countSamplesInKit (kitCopy);
     manifest.pieceCount = (int) kitCopy.getPieces().size();
     manifest.installSizeBytes = outputFolder.getSize();
+    manifest.referenceMode = selfContained ? "selfContained" : "referenced";
+
+    for (const auto& usage : libraryUsage)
+    {
+        KitDependency dep;
+        dep.libraryId = usage.first;
+        dep.usedSampleCount = usage.second;
+        dep.name = usage.first;
+
+        for (const auto& known : options.dependencyCatalog)
+        {
+            if (known.libraryId == usage.first)
+            {
+                dep.name = known.name.isNotEmpty() ? known.name : usage.first;
+                dep.license = known.license;
+                break;
+            }
+        }
+
+        manifest.dependencies.push_back (std::move (dep));
+    }
 
     juce::String manifestError;
 

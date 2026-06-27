@@ -28,7 +28,8 @@ public:
     ImportResult importSfzFile (const juce::File& sfzFile, SFZImporter& importer);
     ImportResult importLooseFolder (const juce::File& folder, LooseSampleFolderImporter& importer);
     ImportResult installKitforgeFile (const juce::File& kitforgeFile);
-    ImportResult exportKitToFile (const KitModel& kit, const juce::File& outputFile, const juce::String& kitName);
+    ImportResult exportKitToFile (const KitModel& kit, const juce::File& outputFile,
+                                  const juce::String& kitName, bool selfContained = true);
 
 private:
     SampleIndex& sampleIndex;

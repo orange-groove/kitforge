@@ -26,6 +26,21 @@ juce::var ManifestSerializer::manifestToVar (const KitManifest& manifest)
     obj->setProperty ("sampleCount", manifest.sampleCount);
     obj->setProperty ("pieceCount", manifest.pieceCount);
     obj->setProperty ("installSizeBytes", manifest.installSizeBytes);
+    obj->setProperty ("referenceMode", manifest.referenceMode);
+
+    juce::Array<juce::var> depVars;
+
+    for (const auto& dep : manifest.dependencies)
+    {
+        auto* depObj = new juce::DynamicObject();
+        depObj->setProperty ("libraryId", dep.libraryId);
+        depObj->setProperty ("name", dep.name);
+        depObj->setProperty ("license", dep.license);
+        depObj->setProperty ("usedSampleCount", dep.usedSampleCount);
+        depVars.add (juce::var (depObj));
+    }
+
+    obj->setProperty ("dependencies", depVars);
     return juce::var (obj);
 }
 
@@ -56,6 +71,23 @@ KitManifest ManifestSerializer::manifestFromVar (const juce::var& v)
         if (auto* tags = obj->getProperty ("tags").getArray())
             for (const auto& tag : *tags)
                 manifest.tags.add (tag.toString());
+
+        const auto refMode = obj->getProperty ("referenceMode").toString();
+        if (refMode.isNotEmpty())
+            manifest.referenceMode = refMode;
+
+        if (auto* deps = obj->getProperty ("dependencies").getArray())
+        {
+            for (const auto& depVar : *deps)
+            {
+                KitDependency dep;
+                dep.libraryId = depVar.getProperty ("libraryId", {}).toString();
+                dep.name = depVar.getProperty ("name", {}).toString();
+                dep.license = depVar.getProperty ("license", {}).toString();
+                dep.usedSampleCount = (int) depVar.getProperty ("usedSampleCount", 0);
+                manifest.dependencies.push_back (std::move (dep));
+            }
+        }
     }
 
     if (manifest.kitFile.isEmpty())

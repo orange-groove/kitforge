@@ -131,7 +131,8 @@ KitImportService::ImportResult KitImportService::installKitforgeFile (const juce
 
 KitImportService::ImportResult KitImportService::exportKitToFile (const KitModel& kit,
                                                                    const juce::File& outputFile,
-                                                                   const juce::String& kitName)
+                                                                   const juce::String& kitName,
+                                                                   bool selfContained)
 {
     ImportResult result;
 
@@ -139,6 +140,18 @@ KitImportService::ImportResult KitImportService::exportKitToFile (const KitModel
     KitForgePackageWriter::WriteOptions options;
     options.packageId = slugify (kitName);
     options.kitName = kitName;
+    options.referenceMode = selfContained ? KitForgePackageWriter::ReferenceMode::selfContained
+                                          : KitForgePackageWriter::ReferenceMode::referenced;
+
+    // Provide library metadata so dependency credits/licenses are recorded.
+    for (const auto& lib : sampleIndex.getLibraries())
+    {
+        KitDependency dep;
+        dep.libraryId = lib.id;
+        dep.name = lib.name;
+        dep.license = lib.license;
+        options.dependencyCatalog.push_back (std::move (dep));
+    }
 
     const auto writeResult = writer.writePackage (kit, outputFile, options);
 

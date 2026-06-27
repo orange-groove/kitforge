@@ -1,4 +1,11 @@
-import type { NativeMessage, OutboundMessage, LibraryMapping } from "../types/kit";
+import type {
+  NativeMessage,
+  OutboundMessage,
+  LibraryMapping,
+  SampleSetQuery,
+  SwapMode,
+  SwapOptions,
+} from "../types/kit";
 import { getNativeFunction, isJuceBackendAvailable } from "./juceShim";
 
 const NATIVE_FN = "kitforgeMessage";
@@ -99,6 +106,16 @@ export const kitforgeBridge = {
   getLibraryMapping: (libraryId: string) => sendRaw({ type: "getLibraryMapping", libraryId }),
   applyLibraryMapping: (libraryId: string, mappings: LibraryMapping[]) =>
     sendRaw({ type: "applyLibraryMapping", libraryId, mappings }),
+  searchSampleSets: (query: SampleSetQuery) =>
+    sendRaw({ type: "searchSampleSets", query }),
+  previewSampleSet: (sampleSetId: string) =>
+    sendRaw({ type: "previewSampleSet", sampleSetId }),
+  swapSampleSet: (
+    target: { pieceId: string; articulationId?: string; layerId?: string; mode: SwapMode },
+    sampleSetId: string,
+    options?: SwapOptions,
+  ) => sendRaw({ type: "swapSampleSet", target, sampleSetId, ...(options ? { options } : {}) }),
+  rebuildSampleIndex: () => sendRaw({ type: "rebuildSampleIndex" }),
   aiBuildKit: (prompt: string) => sendRaw({ type: "aiBuildKit", prompt }),
 };
 

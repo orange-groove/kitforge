@@ -119,6 +119,63 @@ export interface LibraryMappingState {
   mappings: LibraryMapping[];
 }
 
+// ---- Cross-library sample swapping ----
+
+export type SwapMode = "articulation" | "piece" | "layer";
+
+/** A swappable musical unit indexed from an installed library (UI summary). */
+export interface SampleSetSummary {
+  id: string;
+  libraryId: string;
+  displayName: string;
+  instrumentType: DrumPieceType;
+  articulation: string;
+  tags: string[];
+  sampleCount: number;
+  velocityLayerCount: number;
+  roundRobinCount: number;
+  sourceKitName: string;
+  sourcePackPath: string;
+  allSamplesPresent: boolean;
+}
+
+export interface SampleIndexState {
+  sampleSetCount: number;
+  libraryCount: number;
+  missingSampleCount: number;
+}
+
+export interface SampleSetQuery {
+  instrumentType?: string;
+  articulation?: string;
+  libraryId?: string;
+  text?: string;
+  tags?: string[];
+  minVelocityLayers?: number;
+  minRoundRobins?: number;
+}
+
+export interface SwapTarget {
+  pieceId: string;
+  articulationId?: string;
+  layerId?: string;
+  instrumentType: DrumPieceType;
+  articulationName?: string;
+  pieceName?: string;
+  mode: SwapMode;
+}
+
+export interface SwapOptions {
+  useSourceName?: boolean;
+  useSourceMidi?: boolean;
+  useSourceVelocityRanges?: boolean;
+}
+
+export interface ValidationReport {
+  errors: string[];
+  warnings: string[];
+}
+
 export type NativeMessage =
   | { type: "kitState"; kit: KitModel }
   | { type: "catalogState"; installed: InstalledKit[] }
@@ -130,6 +187,11 @@ export type NativeMessage =
   | { type: "libraryMappingState"; libraryId: string; libraryName: string; kitName: string; sources: LibraryMappingSource[]; targets: LibraryMappingTarget[]; mappings: LibraryMapping[] }
   | { type: "libraryApplied"; libraryId: string; libraryName: string; appliedCount: number; message: string }
   | { type: "aiBuildComplete"; success: boolean; message: string }
+  | { type: "sampleSetSearchResults"; results: SampleSetSummary[] }
+  | { type: "sampleIndexState"; sampleSetCount: number; libraryCount: number; missingSampleCount: number }
+  | { type: "sampleSwapCompleted"; pieceId: string; articulationId: string; sampleSetId: string }
+  | { type: "sampleSwapFailed"; message: string }
+  | { type: "validationState"; report: ValidationReport }
   | { type: "busy"; label: string }
   | { type: "error"; message: string };
 
@@ -155,6 +217,15 @@ export type OutboundMessage =
   | { type: "useLibrary"; libraryId: string }
   | { type: "getLibraryMapping"; libraryId: string }
   | { type: "applyLibraryMapping"; libraryId: string; mappings: LibraryMapping[] }
+  | { type: "searchSampleSets"; query: SampleSetQuery }
+  | { type: "previewSampleSet"; sampleSetId: string }
+  | {
+      type: "swapSampleSet";
+      target: { pieceId: string; articulationId?: string; layerId?: string; mode: SwapMode };
+      sampleSetId: string;
+      options?: SwapOptions;
+    }
+  | { type: "rebuildSampleIndex" }
   | { type: "aiBuildKit"; prompt: string };
 
 /** @deprecated Use InstalledKit */

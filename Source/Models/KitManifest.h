@@ -1,6 +1,16 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <vector>
+
+/** Source library a self-contained package borrowed samples from. */
+struct KitDependency
+{
+    juce::String libraryId;
+    juce::String name;
+    juce::String license;
+    int usedSampleCount = 0;
+};
 
 /** Metadata for a native `.kitforge` drum kit package (manifest.json). */
 struct KitManifest
@@ -25,6 +35,8 @@ struct KitManifest
     int sampleCount = 0;
     int pieceCount = 0;
     int64 installSizeBytes = 0;
+    juce::String referenceMode { "selfContained" }; // "referenced" | "selfContained"
+    std::vector<KitDependency> dependencies;
 
     bool isValid() const
     {

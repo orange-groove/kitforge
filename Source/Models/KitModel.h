@@ -28,6 +28,9 @@ public:
 
     const std::vector<DrumPiece>& getPieces() const { return pieces; }
 
+    /** Mutable access for in-place edits (e.g. sample-ref resolution, swaps). */
+    std::vector<DrumPiece>& getPiecesMutable() { return pieces; }
+
     DrumPiece* findPieceById (const juce::String& id);
     const DrumPiece* findPieceById (const juce::String& id) const;
 

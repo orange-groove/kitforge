@@ -2,11 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Box, Flex, Spinner, Text, useDisclosure } from "@chakra-ui/react";
 import { AppShell } from "./components/layout/AppShell";
 import { LibraryMappingModal } from "./components/library/LibraryMappingModal";
+import { SampleSwapModal } from "./components/sample-browser/SampleSwapModal";
 import type {
   InstalledKit,
   KitModel,
   LibraryMappingState,
   NativeMessage,
+  SampleIndexState,
+  SampleSetSummary,
+  SwapTarget,
 } from "./types/kit";
 import {
   isJuceAvailable,
@@ -26,6 +30,12 @@ export default function App() {
   const [mappingState, setMappingState] = useState<LibraryMappingState | null>(null);
   const mappingModal = useDisclosure();
 
+  const [swapTarget, setSwapTarget] = useState<SwapTarget | null>(null);
+  const [swapResults, setSwapResults] = useState<SampleSetSummary[]>([]);
+  const [sampleIndexState, setSampleIndexState] = useState<SampleIndexState | null>(null);
+  const [swapSearching, setSwapSearching] = useState(false);
+  const swapModal = useDisclosure();
+
   const handleMapLibrary = useCallback(
     (kitId: string) => {
       setMappingState(null);
@@ -33,6 +43,16 @@ export default function App() {
       kitforgeBridge.getLibraryMapping(kitId);
     },
     [mappingModal],
+  );
+
+  const handleSwapSamples = useCallback(
+    (target: SwapTarget) => {
+      setSwapTarget(target);
+      setSwapResults([]);
+      setSwapSearching(true);
+      swapModal.onOpen();
+    },
+    [swapModal],
   );
 
   const handleNativeMessage = useCallback((msg: NativeMessage) => {
@@ -72,6 +92,32 @@ export default function App() {
         setAiLoading(false);
         setAiMessage(msg.message);
         if (msg.success) setError(null);
+        break;
+      case "sampleSetSearchResults":
+        setSwapResults(msg.results);
+        setSwapSearching(false);
+        break;
+      case "sampleIndexState":
+        setSampleIndexState({
+          sampleSetCount: msg.sampleSetCount,
+          libraryCount: msg.libraryCount,
+          missingSampleCount: msg.missingSampleCount,
+        });
+        break;
+      case "sampleSwapCompleted":
+        setBusyLabel(null);
+        setAiMessage("Samples swapped.");
+        break;
+      case "sampleSwapFailed":
+        setBusyLabel(null);
+        setError(msg.message);
+        break;
+      case "validationState":
+        if (msg.report.warnings.length > 0 || msg.report.errors.length > 0) {
+          setAiMessage(
+            [...msg.report.errors, ...msg.report.warnings].slice(0, 3).join(" · "),
+          );
+        }
         break;
       case "error":
         setError(msg.message);
@@ -127,11 +173,21 @@ export default function App() {
           setAiLoading(true);
         }}
         onMapLibrary={handleMapLibrary}
+        onSwapSamples={handleSwapSamples}
       />
       <LibraryMappingModal
         state={mappingState}
         isOpen={mappingModal.isOpen}
         onClose={mappingModal.onClose}
+      />
+      <SampleSwapModal
+        isOpen={swapModal.isOpen}
+        onClose={swapModal.onClose}
+        target={swapTarget}
+        results={swapResults}
+        indexState={sampleIndexState}
+        libraries={installed}
+        searching={swapSearching}
       />
       {busyLabel && (
         <Flex

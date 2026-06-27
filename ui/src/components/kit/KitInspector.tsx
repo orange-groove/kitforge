@@ -15,7 +15,7 @@ import {
   Text,
   Badge,
 } from "@chakra-ui/react";
-import type { DrumPiece } from "../../types/kit";
+import type { DrumPiece, SwapTarget } from "../../types/kit";
 import {
   kitforgeBridge,
   pitchRatioFromSemitones,
@@ -28,12 +28,14 @@ interface KitInspectorProps {
   piece: DrumPiece | null;
   selectedArticulationId: string | null;
   onSelectArticulation: (articulationId: string | null) => void;
+  onSwapSamples: (target: SwapTarget) => void;
 }
 
 export function KitInspector({
   piece,
   selectedArticulationId,
   onSelectArticulation,
+  onSwapSamples,
 }: KitInspectorProps) {
   const activeArticulation = piece
     ? piece.articulations.find((art) => art.id === selectedArticulationId) ??
@@ -197,6 +199,24 @@ export function KitInspector({
             onClick={() => kitforgeBridge.assignSample(piece.id, activeArticulation.id)}
           >
             Assign sample to {activeArticulation.name}
+          </Button>
+          <Button
+            size="sm"
+            w="100%"
+            colorScheme="blue"
+            variant="outline"
+            onClick={() =>
+              onSwapSamples({
+                pieceId: piece.id,
+                articulationId: activeArticulation.id,
+                instrumentType: piece.type,
+                articulationName: activeArticulation.name,
+                pieceName: piece.name,
+                mode: "articulation",
+              })
+            }
+          >
+            Swap samples for {activeArticulation.name}
           </Button>
           <Button
             size="sm"

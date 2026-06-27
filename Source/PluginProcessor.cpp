@@ -127,6 +127,15 @@ void KitForgeAudioProcessor::triggerArticulation (const juce::String& pieceId,
     samplerEngine.queueTriggerArticulation (pieceId, articulationId, velocity);
 }
 
+void KitForgeAudioProcessor::previewSampleFile (const juce::String& absolutePath, float velocity)
+{
+    if (absolutePath.isEmpty())
+        return;
+
+    samplerEngine.preloadSamples ({ absolutePath }); // decode off the audio thread
+    samplerEngine.queuePreviewFile (absolutePath, velocity);
+}
+
 
 void KitForgeAudioProcessor::rebuildEngine()
 {

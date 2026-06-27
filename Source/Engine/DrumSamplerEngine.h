@@ -32,6 +32,9 @@ public:
     void queueTriggerPiece (const juce::String& pieceId, float velocity);
     void queueTriggerArticulation (const juce::String& pieceId, const juce::String& articulationId, float velocity);
 
+    /** Preview an arbitrary already-decoded file (call preloadSamples first). */
+    void queuePreviewFile (const juce::String& absolutePath, float velocity);
+
     SampleLoader& getSampleLoader() { return sampleLoader; }
 
 private:
@@ -48,6 +51,8 @@ private:
         juce::String pieceId;
         juce::String articulationId;
         bool usePieceId = false;
+        bool isPreview = false;
+        juce::String previewPath;
     };
 
     SampleLoader sampleLoader;
@@ -67,6 +72,7 @@ private:
     void triggerPieceArticulation (const KitModel& model, const juce::String& pieceId,
                                    const juce::String& articulationId, float velocity);
     void playArticulation (const DrumPiece& piece, const Articulation& art, float velocity);
+    void playPreview (const juce::String& absolutePath, float velocity);
 
     DrumVoice* allocateVoice();
     void releaseFinishedVoices();

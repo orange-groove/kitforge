@@ -28,6 +28,10 @@ juce::var KitSerializer::drumSampleToVar (const DrumSample& sample)
     auto* obj = new juce::DynamicObject();
     obj->setProperty ("id", sample.id);
     obj->setProperty ("filePath", sample.filePath);
+
+    if (sample.sampleRef.hasRef())
+        obj->setProperty ("sampleRef", sample.sampleRef.toVar());
+
     obj->setProperty ("rootMidiNote", sample.rootMidiNote);
     obj->setProperty ("gain", sample.gain);
     obj->setProperty ("pan", sample.pan);
@@ -45,6 +49,10 @@ DrumSample KitSerializer::drumSampleFromVar (const juce::var& v)
     {
         sample.id = obj->getProperty ("id").toString();
         sample.filePath = obj->getProperty ("filePath").toString();
+
+        if (obj->hasProperty ("sampleRef"))
+            sample.sampleRef = SampleRef::fromVar (obj->getProperty ("sampleRef"));
+
         sample.rootMidiNote = (int) obj->getProperty ("rootMidiNote");
         sample.gain = (float) obj->getProperty ("gain");
         sample.pan = (float) obj->getProperty ("pan");
