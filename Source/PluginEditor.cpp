@@ -29,6 +29,20 @@ KitForgeAudioProcessorEditor::KitForgeAudioProcessorEditor (KitForgeAudioProcess
 {
 #if JUCE_WEB_BROWSER
     bridge = std::make_unique<WebViewBridge> (processorRef);
+
+    // The UI hosts its own resize grip (the native WebView covers the host/JUCE resize
+    // corner in some hosts, e.g. FL Studio attached mode), so resize the editor on request.
+    bridge->onResizeEditorRequested = [this] (int width, int height)
+    {
+        if (auto* c = getConstrainer())
+        {
+            width  = juce::jlimit (c->getMinimumWidth(),  c->getMaximumWidth(),  width);
+            height = juce::jlimit (c->getMinimumHeight(), c->getMaximumHeight(), height);
+        }
+
+        setSize (width, height);
+    };
+
     webView = std::make_unique<juce::WebBrowserComponent> (bridge->buildBrowserOptions());
     bridge->attachToBrowser (*webView);
     addAndMakeVisible (*webView);
@@ -78,6 +92,30 @@ void KitForgeAudioProcessorEditor::showFallback (const juce::String& reason)
     fallbackLabel.setVisible (true);
 }
 #endif
+
+void KitForgeAudioProcessorEditor::saveKit()
+{
+#if JUCE_WEB_BROWSER
+    if (bridge != nullptr)
+        bridge->requestSaveKit();
+#endif
+}
+
+void KitForgeAudioProcessorEditor::saveKitAs()
+{
+#if JUCE_WEB_BROWSER
+    if (bridge != nullptr)
+        bridge->requestSaveKitAs();
+#endif
+}
+
+void KitForgeAudioProcessorEditor::loadKit()
+{
+#if JUCE_WEB_BROWSER
+    if (bridge != nullptr)
+        bridge->requestLoadKit();
+#endif
+}
 
 void KitForgeAudioProcessorEditor::paint (juce::Graphics& g)
 {

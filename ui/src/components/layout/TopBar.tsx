@@ -1,4 +1,14 @@
-import { Box, Flex, Heading, Button, HStack } from "@chakra-ui/react";
+import {
+  Box,
+  Flex,
+  Heading,
+  Button,
+  HStack,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+} from "@chakra-ui/react";
 import { kitforgeBridge } from "../../bridge/kitforgeBridge";
 
 interface TopBarProps {
@@ -30,6 +40,26 @@ export function TopBar({
         <Heading size="sm" letterSpacing="wide">
           KitForge
         </Heading>
+        <Menu>
+          <MenuButton
+            as={Button}
+            size="sm"
+            variant="ghost"
+            colorScheme="gray"
+            fontWeight="normal"
+          >
+            File
+          </MenuButton>
+          <MenuList minW="180px">
+            <MenuItem command="⌘S" onClick={() => kitforgeBridge.saveKit()}>
+              Save
+            </MenuItem>
+            <MenuItem onClick={() => kitforgeBridge.saveKitAs()}>
+              Save As…
+            </MenuItem>
+            <MenuItem onClick={() => kitforgeBridge.loadKit()}>Load…</MenuItem>
+          </MenuList>
+        </Menu>
         <Box fontSize="sm" color="kit.textMuted">
           {kitName}
         </Box>
@@ -52,12 +82,6 @@ export function TopBar({
           onClick={onToggleEditLayout}
         >
           Edit Layout
-        </Button>
-        <Button size="sm" variant="outline" borderColor="kit.border" onClick={() => kitforgeBridge.saveKit()}>
-          Save
-        </Button>
-        <Button size="sm" variant="outline" borderColor="kit.border" onClick={() => kitforgeBridge.loadKit()}>
-          Load
         </Button>
       </HStack>
     </Flex>

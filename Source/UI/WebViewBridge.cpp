@@ -289,8 +289,11 @@ void WebViewBridge::dispatchMessage (const juce::var& message)
     else if (type == "updatePiece")               handleUpdatePiece (message);
     else if (type == "renamePiece")               handleRenamePiece (message);
     else if (type == "setArticulationMidi")       handleSetArticulationMidi (message);
+    else if (type == "reorderPiece")              handleReorderPiece (message);
     else if (type == "deletePiece")               handleDeletePiece (message);
+    else if (type == "resizeEditor")              handleResizeEditor (message);
     else if (type == "saveKit")                   handleSaveKit();
+    else if (type == "saveKitAs")                 handleSaveKitAs();
     else if (type == "loadKit")                   handleLoadKit();
     else if (type == "importSfz")                 handleImportSfz();
     else if (type == "importLooseFolder")         handleImportLooseFolder();
@@ -486,6 +489,17 @@ void WebViewBridge::handleSetArticulationMidi (const juce::var& message)
     }
 }
 
+void WebViewBridge::handleReorderPiece (const juce::var& message)
+{
+    const auto pieceId = message.getProperty ("pieceId", {}).toString();
+    const auto mode    = message.getProperty ("mode", {}).toString();
+
+    const juce::ScopedLock lock (processor.getModelLock());
+
+    // Stacking only changes draw order, not the audio graph — no engine rebuild.
+    processor.getKitModel().reorderPiece (pieceId, mode);
+}
+
 void WebViewBridge::handleDeletePiece (const juce::var& message)
 {
     const auto pieceId = message.getProperty ("pieceId", {}).toString();
@@ -496,7 +510,56 @@ void WebViewBridge::handleDeletePiece (const juce::var& message)
         processor.rebuildEngine();
 }
 
+void WebViewBridge::handleResizeEditor (const juce::var& message)
+{
+    const auto width  = (int) message.getProperty ("width", 0);
+    const auto height = (int) message.getProperty ("height", 0);
+
+    if (width <= 0 || height <= 0)
+        return;
+
+    juce::Component::SafePointer<WebViewBridge> safeThis (this);
+
+    // Editor resize must happen on the message thread; the host honours the new size
+    // via the editor's constrainer (setResizeLimits), so we don't clamp here.
+    juce::MessageManager::callAsync ([safeThis, width, height]
+    {
+        if (safeThis != nullptr && safeThis->onResizeEditorRequested != nullptr)
+            safeThis->onResizeEditorRequested (width, height);
+    });
+}
+
+void WebViewBridge::requestSaveKit()   { handleSaveKit(); }
+void WebViewBridge::requestSaveKitAs() { handleSaveKitAs(); }
+void WebViewBridge::requestLoadKit()   { handleLoadKit(); }
+
 void WebViewBridge::handleSaveKit()
+{
+    // Save straight to the loaded file with no dialog; only prompt when there is no file yet.
+    if (currentKitFile != juce::File() && currentKitFile.getParentDirectory().isDirectory())
+    {
+        bool ok = false;
+        {
+            const juce::ScopedLock lock (processor.getModelLock());
+            ok = KitSerializer::saveKitToFile (processor.getKitModel(), currentKitFile);
+        }
+
+        if (! ok)
+        {
+            sendError ("Could not save kit file.");
+            return;
+        }
+
+        auto msg = messageWithType ("kitSaved");
+        msg.getDynamicObject()->setProperty ("message", "Saved " + currentKitFile.getFileName());
+        sendToWeb (msg);
+        return;
+    }
+
+    handleSaveKitAs();
+}
+
+void WebViewBridge::handleSaveKitAs()
 {
     saveKitFileChooser.launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
                           [this] (const juce::FileChooser& fc)
@@ -509,10 +572,23 @@ void WebViewBridge::handleSaveKit()
                               if (! file.hasFileExtension ("json"))
                                   file = file.withFileExtension ("json");
 
-                              const juce::ScopedLock lock (processor.getModelLock());
+                              bool ok = false;
+                              {
+                                  const juce::ScopedLock lock (processor.getModelLock());
+                                  ok = KitSerializer::saveKitToFile (processor.getKitModel(), file);
+                              }
 
-                              if (! KitSerializer::saveKitToFile (processor.getKitModel(), file))
+                              if (! ok)
+                              {
                                   sendError ("Could not save kit file.");
+                                  return;
+                              }
+
+                              currentKitFile = file;
+
+                              auto msg = messageWithType ("kitSaved");
+                              msg.getDynamicObject()->setProperty ("message", "Saved " + file.getFileName());
+                              sendToWeb (msg);
                           });
 }
 
@@ -526,13 +602,19 @@ void WebViewBridge::handleLoadKit()
                               if (! file.existsAsFile())
                                   return;
 
-                              const juce::ScopedLock lock (processor.getModelLock());
-
-                              if (! KitSerializer::loadKitFromFile (processor.getKitModel(), file))
                               {
-                                  sendError ("Could not load kit file.");
-                                  return;
+                                  const juce::ScopedLock lock (processor.getModelLock());
+
+                                  if (! KitSerializer::loadKitFromFile (processor.getKitModel(), file))
+                                  {
+                                      sendError ("Could not load kit file.");
+                                      return;
+                                  }
+
+                                  KitModelBuilder::ensureUniqueMidiNotes (processor.getKitModel());
                               }
+
+                              currentKitFile = file;
 
                               processor.rebuildEngine();
                               processor.getKitModel().notifyChanged();
@@ -712,8 +794,12 @@ void WebViewBridge::handleLoadInstalledKit (const juce::var& message)
             processor.getServices().getSampleIndexService().resolveKitSampleRefs (processor.getKitModel());
 
             KitModelBuilder::pruneMixedVoices (processor.getKitModel());
+            KitModelBuilder::ensureUniqueMidiNotes (processor.getKitModel());
             applyImportKitLayout (processor.getKitModel(), 980.0f, 680.0f);
         }
+
+        // Library kits aren't user-managed kit files; force "Save" to prompt Save As.
+        currentKitFile = juce::File();
 
         processor.rebuildEngine();
         processor.getKitModel().notifyChanged();

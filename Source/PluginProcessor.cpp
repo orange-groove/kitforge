@@ -4,6 +4,7 @@
 #include "Serialization/KitForgePackageReader.h"
 #include "Core/KitForgePaths.h"
 #include "Core/DemoKitSampleBindings.h"
+#include "Importers/KitModelBuilder.h"
 
 KitForgeAudioProcessor::KitForgeAudioProcessor()
      : AudioProcessor (BusesProperties()
@@ -23,6 +24,7 @@ KitForgeAudioProcessor::KitForgeAudioProcessor()
             DemoKitSampleBindings::bindSamplePathsFromFolder (kit, installPath);
             kit.resolveSamplePaths (installPath);
             kitModel.importContents (kit);
+            KitModelBuilder::ensureUniqueMidiNotes (kitModel);
             rebuildEngine();
         }
     }
@@ -179,6 +181,7 @@ void KitForgeAudioProcessor::setStateInformation (const void* data, int sizeInBy
     {
         const juce::ScopedLock lock (modelLock);
         KitSerializer::kitFromVar (kitModel, parsed);
+        KitModelBuilder::ensureUniqueMidiNotes (kitModel);
 
         if (! DemoKitSampleBindings::kitHasAssignedSamples (kitModel))
         {

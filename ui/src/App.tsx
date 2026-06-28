@@ -74,6 +74,10 @@ export default function App() {
         setError(null);
         setBusyLabel(msg.label);
         break;
+      case "kitSaved":
+        setError(null);
+        setAiMessage(msg.message);
+        break;
       case "kitRemoved":
         setInstalled((prev) => prev.filter((k) => k.id !== msg.kitId));
         setAiMessage("Kit removed.");
@@ -148,6 +152,17 @@ export default function App() {
     if (!isJuceAvailable()) {
       setAiMessage("Browser dev mode — using mock kit data.");
     }
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        kitforgeBridge.saveKit();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   return (

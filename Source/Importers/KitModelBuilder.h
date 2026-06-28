@@ -24,4 +24,10 @@ public:
         drum bodies (keeps only the dominant voice per articulation). Safe to run on
         any kit; used on load so previously-imported kits get fixed without re-import. */
     static void pruneMixedVoices (KitModel& model);
+
+    /** Guarantees every articulation across the kit triggers a unique MIDI note,
+        moving later duplicates to the nearest free note. Safe to run on any kit;
+        used on load so kits with colliding notes (e.g. two rides both on 51/53)
+        get separated without a re-import. */
+    static void ensureUniqueMidiNotes (KitModel& model);
 };

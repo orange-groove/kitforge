@@ -542,7 +542,9 @@ int SampleNameParser::defaultMidiForTypeAndArticulation (DrumPieceType type, int
     {
         if (art == "bell") return 53;
         if (art == "edge") return 59;
-        return 51;
+        // Second and later rides default to GM Ride Cymbal 2 so they don't
+        // collapse onto the first ride's note (collisions are finalized later).
+        return index == 0 ? 51 : 59;
     }
 
     if (type == DrumPieceType::china)

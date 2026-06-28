@@ -16,6 +16,11 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
 
+    /** Invoked by the standalone File menu. No-ops when the WebView UI is unavailable. */
+    void saveKit();
+    void saveKitAs();
+    void loadKit();
+
 private:
     KitForgeAudioProcessor& processorRef;
 

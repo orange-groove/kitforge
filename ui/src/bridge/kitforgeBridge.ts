@@ -94,8 +94,15 @@ export const kitforgeBridge = {
     sendRaw({ type: "renamePiece", pieceId, name }),
   setArticulationMidi: (pieceId: string, articulationId: string, midiNote: number) =>
     sendRaw({ type: "setArticulationMidi", pieceId, articulationId, midiNote }),
+  reorderPiece: (
+    pieceId: string,
+    mode: "front" | "back" | "forward" | "backward",
+  ) => sendRaw({ type: "reorderPiece", pieceId, mode }),
   deletePiece: (pieceId: string) => sendRaw({ type: "deletePiece", pieceId }),
+  resizeEditor: (width: number, height: number) =>
+    sendRaw({ type: "resizeEditor", width: Math.round(width), height: Math.round(height) }),
   saveKit: () => sendRaw({ type: "saveKit" }),
+  saveKitAs: () => sendRaw({ type: "saveKitAs" }),
   loadKit: () => sendRaw({ type: "loadKit" }),
   importSfz: () => sendRaw({ type: "importSfz" }),
   importLooseFolder: () => sendRaw({ type: "importLooseFolder" }),

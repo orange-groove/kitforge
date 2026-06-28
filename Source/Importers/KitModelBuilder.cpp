@@ -478,6 +478,50 @@ namespace
         }
     }
 
+    /** Guarantees every articulation in the kit triggers a unique MIDI note.
+        The first articulation to claim a note keeps it; later duplicates move to
+        the nearest free note, so two same-type pieces (e.g. a second ride) never
+        share a trigger. Pieces are processed in model order. */
+    void ensureUniqueArticulationNotes (KitModel& model)
+    {
+        bool used[128] = { false };
+
+        auto claimNearestFree = [&used] (int desired) -> int
+        {
+            const int start = juce::jlimit (0, 127, desired);
+
+            for (int delta = 0; delta < 128; ++delta)
+            {
+                if (const int up = start + delta; up <= 127 && ! used[up])
+                    return up;
+
+                if (const int down = start - delta; down >= 0 && ! used[down])
+                    return down;
+            }
+
+            return start;
+        };
+
+        for (auto& piece : model.getPiecesMutable())
+        {
+            for (auto& art : piece.articulations)
+            {
+                int note = juce::jlimit (0, 127, art.midiNote);
+
+                if (used[note])
+                    note = claimNearestFree (note + 1);
+
+                art.midiNote = note;
+                used[note] = true;
+            }
+
+            piece.syncMidiNotesFromArticulations();
+
+            if (! piece.articulations.empty())
+                piece.primaryMidiNote = piece.articulations[0].midiNote;
+        }
+    }
+
     /** Assigns clean display names. Multi-instance types are numbered by pitch. */
     void renamePieces (KitModel& model)
     {
@@ -545,6 +589,7 @@ KitModel KitModelBuilder::buildFromMetadata (const juce::String& kitName,
     splitTomsByPitch (model);
     pruneMixedVoicesImpl (model);
     assignPrimaryArticulations (model);
+    ensureUniqueArticulationNotes (model);
     renamePieces (model);
 
     return model;
@@ -553,4 +598,9 @@ KitModel KitModelBuilder::buildFromMetadata (const juce::String& kitName,
 void KitModelBuilder::pruneMixedVoices (KitModel& model)
 {
     pruneMixedVoicesImpl (model);
+}
+
+void KitModelBuilder::ensureUniqueMidiNotes (KitModel& model)
+{
+    ensureUniqueArticulationNotes (model);
 }

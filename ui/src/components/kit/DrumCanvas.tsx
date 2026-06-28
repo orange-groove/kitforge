@@ -1,19 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Box,
-  Button,
-  Flex,
-  HStack,
-  Text,
-  useDisclosure,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  Input,
-} from "@chakra-ui/react";
+import { Box, Button, Flex, HStack, Text } from "@chakra-ui/react";
 import type { DrumPiece, KitModel, SwapTarget } from "../../types/kit";
 import { kitforgeBridge } from "../../bridge/kitforgeBridge";
 import kickSvgRaw from "../../assets/kick.svg?raw";
@@ -183,9 +169,8 @@ export function DrumCanvas({
 
   const [menuPiece, setMenuPiece] = useState<DrumPiece | null>(null);
   const [menuArticulationId, setMenuArticulationId] = useState<string | null>(null);
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
-  const renameModal = useDisclosure();
-  const [renameValue, setRenameValue] = useState("");
 
   const { refW, refH } = layoutReferenceSize(kit);
   const piecesRef = useRef(kit.pieces);
@@ -486,12 +471,6 @@ export function DrumCanvas({
     }
   };
 
-  const openRename = (piece: DrumPiece) => {
-    setMenuPiece(piece);
-    setRenameValue(piece.name);
-    renameModal.onOpen();
-  };
-
   const cursor =
     panDrag.current != null || pendingInteraction.current != null
       ? "grabbing"
@@ -576,6 +555,7 @@ export function DrumCanvas({
               onSelectPiece(piece.id, articulationId ?? null);
               setMenuPiece(piece);
               setMenuArticulationId(articulationId ?? edgeArt?.id ?? piece.articulations[0]?.id ?? null);
+              setOpenSubmenu(null);
               setMenuPos({ x: e.clientX, y: e.clientY });
             };
 
@@ -602,6 +582,7 @@ export function DrumCanvas({
               onSelectPiece(piece.id, articulationId);
               setMenuPiece(piece);
               setMenuArticulationId(articulationId);
+              setOpenSubmenu(null);
               setMenuPos({ x: e.clientX, y: e.clientY });
             };
 
@@ -911,89 +892,133 @@ export function DrumCanvas({
           fontSize="sm"
           minW="160px"
           onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
         >
-          {[
-            {
-              label: "Learn MIDI Note",
-              action: () => {
-                kitforgeBridge.learnMidi(menuPiece.id, menuArticulationId ?? "");
+          {(
+            [
+              {
+                label: "Learn MIDI Note",
+                action: () => {
+                  kitforgeBridge.learnMidi(menuPiece.id, menuArticulationId ?? "");
+                },
               },
-            },
-            {
-              label: "Assign Sample",
-              action: () => {
-                kitforgeBridge.assignSample(menuPiece.id, menuArticulationId ?? "");
+              {
+                label: "Assign Sample",
+                action: () => {
+                  kitforgeBridge.assignSample(menuPiece.id, menuArticulationId ?? "");
+                },
               },
-            },
-            {
-              label: "Swap Samples",
-              action: () => {
-                const art =
-                  menuPiece.articulations.find((a) => a.id === menuArticulationId) ??
-                  menuPiece.articulations[0];
-                onSwapSamples({
-                  pieceId: menuPiece.id,
-                  articulationId: art?.id,
-                  instrumentType: menuPiece.type,
-                  articulationName: art?.name,
-                  pieceName: menuPiece.name,
-                  mode: "articulation",
-                });
+              {
+                label: "Swap Samples",
+                action: () => {
+                  const art =
+                    menuPiece.articulations.find((a) => a.id === menuArticulationId) ??
+                    menuPiece.articulations[0];
+                  onSwapSamples({
+                    pieceId: menuPiece.id,
+                    articulationId: art?.id,
+                    instrumentType: menuPiece.type,
+                    articulationName: art?.name,
+                    pieceName: menuPiece.name,
+                    mode: "articulation",
+                  });
+                },
               },
-            },
-            { label: "Rename", action: () => openRename(menuPiece) },
-            {
-              label: "Delete",
-              action: () => kitforgeBridge.deletePiece(menuPiece.id),
-              danger: true,
-            },
-          ].map((item) => (
-            <Box
-              key={item.label}
-              px={3}
-              py={2}
-              cursor="pointer"
-              color={item.danger ? "red.300" : undefined}
-              _hover={{ bg: "kit.border" }}
-              onClick={() => {
-                item.action();
-                setMenuPiece(null);
-              }}
-            >
-              {item.label}
-            </Box>
-          ))}
+              {
+                label: "Arrange",
+                submenu: [
+                  { label: "Send to Front", action: () => kitforgeBridge.reorderPiece(menuPiece.id, "front") },
+                  { label: "Send Forwards", action: () => kitforgeBridge.reorderPiece(menuPiece.id, "forward") },
+                  { label: "Send Backwards", action: () => kitforgeBridge.reorderPiece(menuPiece.id, "backward") },
+                  { label: "Send to Back", action: () => kitforgeBridge.reorderPiece(menuPiece.id, "back") },
+                ],
+              },
+              {
+                label: "Delete",
+                action: () => kitforgeBridge.deletePiece(menuPiece.id),
+                danger: true,
+              },
+            ] as {
+              label: string;
+              action?: () => void;
+              danger?: boolean;
+              submenu?: { label: string; action: () => void }[];
+            }[]
+          ).map((item) =>
+            item.submenu ? (
+              <Box
+                key={item.label}
+                position="relative"
+                onMouseEnter={() => setOpenSubmenu(item.label)}
+                onMouseLeave={() => setOpenSubmenu(null)}
+              >
+                <Flex
+                  px={3}
+                  py={2}
+                  align="center"
+                  justify="space-between"
+                  cursor="default"
+                  bg={openSubmenu === item.label ? "kit.border" : undefined}
+                  _hover={{ bg: "kit.border" }}
+                >
+                  <Text as="span">{item.label}</Text>
+                  <Text as="span" color="kit.textMuted" pl={3}>
+                    ›
+                  </Text>
+                </Flex>
+                {openSubmenu === item.label && (
+                  <Box
+                    position="absolute"
+                    left="100%"
+                    top={-1}
+                    ml="-1px"
+                    bg="kit.panel"
+                    border="1px solid"
+                    borderColor="kit.border"
+                    borderRadius="md"
+                    boxShadow="lg"
+                    minW="160px"
+                    zIndex={1001}
+                  >
+                    {item.submenu.map((sub) => (
+                      <Box
+                        key={sub.label}
+                        px={3}
+                        py={2}
+                        cursor="pointer"
+                        _hover={{ bg: "kit.border" }}
+                        onClick={() => {
+                          sub.action();
+                          setMenuPiece(null);
+                          setOpenSubmenu(null);
+                        }}
+                      >
+                        {sub.label}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              <Box
+                key={item.label}
+                px={3}
+                py={2}
+                cursor="pointer"
+                color={item.danger ? "red.300" : undefined}
+                _hover={{ bg: "kit.border" }}
+                onClick={() => {
+                  item.action?.();
+                  setMenuPiece(null);
+                }}
+              >
+                {item.label}
+              </Box>
+            ),
+          )}
         </Box>
       )}
-
-      <Modal isOpen={renameModal.isOpen} onClose={renameModal.onClose} isCentered>
-        <ModalOverlay />
-        <ModalContent bg="kit.panel">
-          <ModalHeader>Rename piece</ModalHeader>
-          <ModalBody>
-            <Input
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              bg="kit.bg"
-              borderColor="kit.border"
-            />
-          </ModalBody>
-          <ModalFooter gap={2}>
-            <Button variant="ghost" onClick={renameModal.onClose}>
-              Cancel
-            </Button>
-            <Button
-              colorScheme="blue"
-              onClick={() => {
-                if (menuPiece) kitforgeBridge.renamePiece(menuPiece.id, renameValue);
-                renameModal.onClose();
-              }}
-            >
-              Save
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </Box>
   );
 }

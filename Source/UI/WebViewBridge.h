@@ -20,6 +20,17 @@ public:
 
     void handleMessageFromWeb (const juce::String& jsonText);
     void sendToWeb (const juce::var& message);
+
+    /** Entry points for the native menu bar (mirror the UI's File menu actions). */
+    void requestSaveKit();
+    void requestSaveKitAs();
+    void requestLoadKit();
+
+    /** Invoked when the UI's resize grip requests a new editor size (width, height in px).
+        Set by the editor; resizing the editor this way works in hosts where the native
+        WebView covers the host/JUCE resize corner (e.g. FL Studio attached mode on macOS). */
+    std::function<void (int, int)> onResizeEditorRequested;
+
     void pushKitState();
     void pushCatalogState();
     void sendError (const juce::String& message);
@@ -39,6 +50,9 @@ private:
 
     juce::FileChooser loadKitFileChooser;
     juce::FileChooser saveKitFileChooser;
+
+    /** File backing the currently loaded kit; empty until the user loads/saves a kit file. */
+    juce::File currentKitFile;
     juce::FileChooser importSfzFileChooser;
     juce::FileChooser importFolderFileChooser;
     juce::FileChooser importKitforgeFileChooser;
@@ -60,8 +74,11 @@ private:
     void handleUpdatePiece (const juce::var& message);
     void handleRenamePiece (const juce::var& message);
     void handleSetArticulationMidi (const juce::var& message);
+    void handleReorderPiece (const juce::var& message);
     void handleDeletePiece (const juce::var& message);
+    void handleResizeEditor (const juce::var& message);
     void handleSaveKit();
+    void handleSaveKitAs();
     void handleLoadKit();
     void handleImportSfz();
     void handleImportLooseFolder();

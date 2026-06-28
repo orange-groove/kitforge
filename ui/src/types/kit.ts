@@ -180,6 +180,7 @@ export type NativeMessage =
   | { type: "kitState"; kit: KitModel }
   | { type: "catalogState"; installed: InstalledKit[] }
   | { type: "kitInstalled"; kitId: string; kitName: string; message: string }
+  | { type: "kitSaved"; message: string }
   | { type: "kitRemoved"; kitId: string }
   | { type: "midiLearnStarted"; pieceId: string; articulationId: string }
   | { type: "midiLearnCompleted"; pieceId: string; articulationId: string; midiNote: number }
@@ -206,8 +207,11 @@ export type OutboundMessage =
   | { type: "updatePiece"; pieceId: string; volume?: number; pan?: number; pitch?: number; muted?: boolean; soloed?: boolean }
   | { type: "renamePiece"; pieceId: string; name: string }
   | { type: "setArticulationMidi"; pieceId: string; articulationId: string; midiNote: number }
+  | { type: "reorderPiece"; pieceId: string; mode: "front" | "back" | "forward" | "backward" }
   | { type: "deletePiece"; pieceId: string }
+  | { type: "resizeEditor"; width: number; height: number }
   | { type: "saveKit" }
+  | { type: "saveKitAs" }
   | { type: "loadKit" }
   | { type: "importSfz" }
   | { type: "importLooseFolder" }

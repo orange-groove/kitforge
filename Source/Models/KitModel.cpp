@@ -400,6 +400,50 @@ bool KitModel::removePiece (const juce::String& id, bool sendChangeNotification)
     return true;
 }
 
+bool KitModel::reorderPiece (const juce::String& id, const juce::String& mode)
+{
+    const auto it = std::find_if (pieces.begin(), pieces.end(),
+                                  [&id] (const DrumPiece& p) { return p.id == id; });
+
+    if (it == pieces.end() || pieces.size() < 2)
+        return false;
+
+    const auto index = (size_t) std::distance (pieces.begin(), it);
+    const size_t last = pieces.size() - 1;
+
+    if (mode == "front")            // draw last → on top of everything
+    {
+        if (index == last) return false;
+        std::rotate (pieces.begin() + (long) index,
+                     pieces.begin() + (long) index + 1,
+                     pieces.end());
+    }
+    else if (mode == "back")        // draw first → behind everything
+    {
+        if (index == 0) return false;
+        std::rotate (pieces.begin(),
+                     pieces.begin() + (long) index,
+                     pieces.begin() + (long) index + 1);
+    }
+    else if (mode == "forward")     // one step toward the top
+    {
+        if (index == last) return false;
+        std::swap (pieces[index], pieces[index + 1]);
+    }
+    else if (mode == "backward")    // one step toward the bottom
+    {
+        if (index == 0) return false;
+        std::swap (pieces[index], pieces[index - 1]);
+    }
+    else
+    {
+        return false;
+    }
+
+    notifyChanged();
+    return true;
+}
+
 void KitModel::clear()
 {
     pieces.clear();

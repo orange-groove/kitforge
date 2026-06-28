@@ -1,9 +1,32 @@
 #include "KitForgeStandaloneMenuModel.h"
 #include "KitForgeStandaloneOptions.h"
 
+#include "../PluginProcessor.h"
+#include "../PluginEditor.h"
+#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+
+namespace
+{
+    KitForgeAudioProcessorEditor* findKitForgeEditor()
+    {
+        if (auto* holder = juce::StandalonePluginHolder::getInstance())
+            if (auto* processor = dynamic_cast<KitForgeAudioProcessor*> (holder->processor.get()))
+                return dynamic_cast<KitForgeAudioProcessorEditor*> (processor->getActiveEditor());
+
+        return nullptr;
+    }
+
+    enum FileMenuIds
+    {
+        fileSaveKit   = 200,
+        fileSaveKitAs = 201,
+        fileLoadKit   = 202,
+    };
+}
+
 juce::StringArray KitForgeStandaloneMenuModel::getMenuBarNames()
 {
-    return { "KitForge", "Options" };
+    return { "File", "Options" };
 }
 
 juce::PopupMenu KitForgeStandaloneMenuModel::getMenuForIndex (int topLevelMenuIndex, const juce::String&)
@@ -12,9 +35,10 @@ juce::PopupMenu KitForgeStandaloneMenuModel::getMenuForIndex (int topLevelMenuIn
 
     if (topLevelMenuIndex == 0)
     {
-        menu.addItem (100, "About KitForge");
+        menu.addItem (fileSaveKit,   "Save");
+        menu.addItem (fileSaveKitAs, "Save As...");
         menu.addSeparator();
-        menu.addItem (101, "Quit KitForge");
+        menu.addItem (fileLoadKit,   "Load...");
     }
     else if (topLevelMenuIndex == 1)
     {
@@ -28,17 +52,13 @@ void KitForgeStandaloneMenuModel::menuItemSelected (int menuItemID, int topLevel
 {
     if (topLevelMenuIndex == 0)
     {
-        if (menuItemID == 100)
-        {
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon,
-                                                    "KitForge",
-                                                    "KitForge v" + juce::String (JucePlugin_VersionString));
-        }
-        else if (menuItemID == 101)
-        {
-            if (auto* app = juce::JUCEApplicationBase::getInstance())
-                app->systemRequestedQuit();
-        }
+        auto* editor = findKitForgeEditor();
+        if (editor == nullptr)
+            return;
+
+        if (menuItemID == fileSaveKit)        editor->saveKit();
+        else if (menuItemID == fileSaveKitAs) editor->saveKitAs();
+        else if (menuItemID == fileLoadKit)   editor->loadKit();
 
         return;
     }

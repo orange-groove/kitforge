@@ -5,6 +5,7 @@ import {
   Divider,
   Flex,
   Heading,
+  Input,
   NumberInput,
   NumberInputField,
   Stack,
@@ -41,11 +42,13 @@ export function KitInspector({
     : undefined;
 
   const [midiDrafts, setMidiDrafts] = useState<Record<string, string>>({});
+  const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
     // Drop in-progress edits when switching pieces so inputs resync to the model.
     setMidiDrafts({});
-  }, [piece?.id]);
+    setNameDraft(piece?.name ?? "");
+  }, [piece?.id, piece?.name]);
 
   if (!piece) {
     return (
@@ -65,11 +68,38 @@ export function KitInspector({
     kitforgeBridge.setArticulationMidi(piece.id, articulationId, clamped);
   };
 
+  const commitName = () => {
+    const trimmed = nameDraft.trim();
+    if (trimmed && trimmed !== piece.name) {
+      kitforgeBridge.renamePiece(piece.id, trimmed);
+    } else {
+      setNameDraft(piece.name);
+    }
+  };
+
   return (
     <Box p={4} h="100%" overflowY="auto">
-      <Heading size="sm" mb={1}>
-        {piece.name}
-      </Heading>
+      <Input
+        value={nameDraft}
+        onChange={(e) => setNameDraft(e.target.value)}
+        onBlur={commitName}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            setNameDraft(piece.name);
+            e.currentTarget.blur();
+          }
+        }}
+        size="sm"
+        fontWeight="bold"
+        variant="flushed"
+        mb={1}
+        px={0}
+        borderColor="transparent"
+        _hover={{ borderColor: "kit.border" }}
+        _focus={{ borderColor: "kit.accent", boxShadow: "none" }}
+      />
       <Stack spacing={0.5} fontSize="sm" color="kit.textMuted" mb={4}>
         <Text>Type: {piece.type}</Text>
       </Stack>

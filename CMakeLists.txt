@@ -163,6 +163,23 @@ if (TARGET KitForge_Standalone)
         VERBATIM)
 endif()
 
+# Embed the React UI inside the plugin bundles so the WebView can load it when
+# hosted in a DAW (it resolves Contents/Resources/ui/dist relative to the plugin binary).
+foreach(_kitforge_fmt VST3 AU)
+    if (TARGET KitForge_${_kitforge_fmt})
+        add_custom_command(TARGET KitForge_${_kitforge_fmt} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf
+                "$<TARGET_FILE_DIR:KitForge_${_kitforge_fmt}>/../Resources/ui/dist"
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:KitForge_${_kitforge_fmt}>/../Resources/ui/dist"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/ui/dist"
+                "$<TARGET_FILE_DIR:KitForge_${_kitforge_fmt}>/../Resources/ui/dist"
+            COMMENT "Copying React UI into ${_kitforge_fmt} plugin bundle"
+            VERBATIM)
+    endif()
+endforeach()
+
 find_program(NPM_EXECUTABLE npm)
 
 if(KITFORGE_BUILD_UI)
@@ -201,5 +218,13 @@ if(KITFORGE_BUILD_UI)
             # Relink Standalone when the UI stamp changes so POST_BUILD recopies ui/dist.
             target_sources(KitForge_Standalone PRIVATE "${_kitforge_ui_stamp}")
         endif()
+
+        foreach(_kitforge_fmt VST3 AU)
+            if(TARGET KitForge_${_kitforge_fmt})
+                add_dependencies(KitForge_${_kitforge_fmt} KitForge_UI_Build)
+                # Relink so POST_BUILD recopies ui/dist when the UI stamp changes.
+                target_sources(KitForge_${_kitforge_fmt} PRIVATE "${_kitforge_ui_stamp}")
+            endif()
+        endforeach()
     endif()
 endif()

@@ -44,6 +44,12 @@ public:
     DrumPiece& addDefaultAccessory (float canvasWidth, float canvasHeight);
 
     bool removePiece (const juce::String& id, bool sendChangeNotification = true);
+
+    /** Reorders a piece within the draw/stack order. Later pieces render on top.
+        mode: "front" (top), "back" (bottom), "forward" (+1), "backward" (-1).
+        Returns true if the order changed. */
+    bool reorderPiece (const juce::String& id, const juce::String& mode);
+
     void clear();
     void importContents (const KitModel& source);
 

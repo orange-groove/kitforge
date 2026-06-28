@@ -6,15 +6,6 @@
 
 namespace
 {
-    juce::StandaloneFilterWindow* findStandaloneWindow()
-    {
-        for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows(); ++i)
-            if (auto* window = dynamic_cast<juce::StandaloneFilterWindow*> (juce::TopLevelWindow::getTopLevelWindow (i)))
-                return window;
-
-        return nullptr;
-    }
-
     void openSettingsWindow()
     {
         if (auto* holder = juce::StandalonePluginHolder::getInstance())
@@ -29,11 +20,6 @@ juce::PopupMenu KitForgeStandaloneOptions::buildMenu()
     menu.addItem (1, "Audio/MIDI Settings...");
     menu.addSeparator();
     menu.addItem (2, "KitForge Settings...");
-    menu.addSeparator();
-    menu.addItem (3, "Save Plugin State...");
-    menu.addItem (4, "Load Plugin State...");
-    menu.addSeparator();
-    menu.addItem (5, "Reset to Default State");
 
    #if ! JUCE_MAC
     menu.addSeparator();
@@ -58,19 +44,6 @@ void KitForgeStandaloneOptions::handleMenuResult (int result)
 
         case 2:
             openSettingsWindow();
-            break;
-
-        case 3:
-            holder->askUserToSaveState();
-            break;
-
-        case 4:
-            holder->askUserToLoadState();
-            break;
-
-        case 5:
-            if (auto* window = findStandaloneWindow())
-                window->resetToDefaultState();
             break;
 
         case 6:

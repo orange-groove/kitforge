@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Box, Flex } from "@chakra-ui/react";
 import { TopBar } from "./TopBar";
 import { SidePanel } from "./SidePanel";
+import { ResizeGrip } from "./ResizeGrip";
 import { DrumCanvas } from "../kit/DrumCanvas";
 import { KitInspector } from "../kit/KitInspector";
 import { LearnKitBanner } from "../kit/LearnKitBanner";
@@ -58,7 +59,7 @@ export function AppShell({
   }, [kit, selectedId, selectedArticulationId, selectedArticulationName]);
 
   return (
-    <Flex direction="column" h="100vh" bg="kit.bg">
+    <Flex direction="column" h="100vh" bg="kit.bg" position="relative">
       <TopBar
         kitName={kit.kitName}
         editLayout={editLayout}
@@ -120,6 +121,7 @@ export function AppShell({
           />
         </Box>
       </Flex>
+      <ResizeGrip />
     </Flex>
   );
 }
