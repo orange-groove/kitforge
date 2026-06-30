@@ -20,25 +20,46 @@ import {
   semitonesFromPitchRatio,
 } from "../../bridge/kitforgeBridge";
 import { PieceMixControls } from "../controls/VolumePanControls";
-import { isRidePiece, rideEdgeArticulation } from "./layoutUtils";
+import { PieceSizeSelect } from "./PieceSizeSelect";
+import { LAYOUT_REF_HEIGHT, LAYOUT_REF_WIDTH } from "./layoutUtils";
 
 interface KitInspectorProps {
   piece: DrumPiece | null;
-  selectedArticulationId: string | null;
-  onSelectArticulation: (articulationId: string | null) => void;
+  canvasWidth?: number;
+  canvasHeight?: number;
+  selectedArticulationName: string | null;
+  onSelectArticulation: (articulationId: string, articulationName: string) => void;
   onSwapSamples: (target: SwapTarget) => void;
+}
+
+function resolveSelectedArticulation(
+  piece: DrumPiece,
+  selectedArticulationName: string | null,
+) {
+  if (!selectedArticulationName) return undefined;
+
+  const target = selectedArticulationName.toLowerCase();
+  return piece.articulations.find((art) => art.name.toLowerCase() === target);
+}
+
+function isArticulationSelected(
+  art: DrumPiece["articulations"][number],
+  selectedArticulationName: string | null,
+): boolean {
+  if (!selectedArticulationName) return false;
+  return art.name.toLowerCase() === selectedArticulationName.toLowerCase();
 }
 
 export function KitInspector({
   piece,
-  selectedArticulationId,
+  canvasWidth = LAYOUT_REF_WIDTH,
+  canvasHeight = LAYOUT_REF_HEIGHT,
+  selectedArticulationName,
   onSelectArticulation,
   onSwapSamples,
 }: KitInspectorProps) {
   const activeArticulation = piece
-    ? piece.articulations.find((art) => art.id === selectedArticulationId) ??
-      (isRidePiece(piece) ? rideEdgeArticulation(piece) : undefined) ??
-      piece.articulations[0]
+    ? resolveSelectedArticulation(piece, selectedArticulationName)
     : undefined;
 
   const [midiDrafts, setMidiDrafts] = useState<Record<string, string>>({});
@@ -104,6 +125,10 @@ export function KitInspector({
         <Text>Type: {piece.type}</Text>
       </Stack>
 
+      <Box mb={4}>
+        <PieceSizeSelect piece={piece} refW={canvasWidth} refH={canvasHeight} />
+      </Box>
+
       <PieceMixControls
         volume={piece.volume}
         pan={piece.pan}
@@ -146,13 +171,13 @@ export function KitInspector({
         Articulations
       </Heading>
       <Stack spacing={2}>
-        {piece.articulations.map((art) => {
+        {piece.articulations.map((art, index) => {
           const hasSample =
             art.hasSample ?? art.layers.some((l) => l.roundRobins.length > 0);
-          const selected = art.id === activeArticulation?.id;
+          const selected = isArticulationSelected(art, selectedArticulationName);
           return (
             <Flex
-              key={art.id}
+              key={`${art.id}-${art.name}-${index}`}
               justify="space-between"
               align="center"
               p={2}
@@ -163,7 +188,7 @@ export function KitInspector({
               fontSize="sm"
               cursor="pointer"
               onClick={() => {
-                onSelectArticulation(art.id);
+                onSelectArticulation(art.id, art.name);
                 kitforgeBridge.triggerPiece(piece.id, art.id);
               }}
             >

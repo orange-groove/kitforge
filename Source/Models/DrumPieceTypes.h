@@ -107,22 +107,37 @@ inline ShapeType effectiveShapeForPiece (DrumPieceType type, ShapeType stored)
     return ShapeType::circle;
 }
 
-/** Top-down kit view diameter (width == height) in canvas pixels. */
-inline float defaultPieceSize (DrumPieceType type)
+/** Layout reference pixels per inch of drum/cymbal diameter (980×680 canvas). */
+inline constexpr float kLayoutPixelsPerInch = 6.0f;
+
+/** Typical factory diameter in inches for each piece type. */
+inline float defaultPieceDiameterInches (DrumPieceType type)
 {
     switch (type)
     {
-        case DrumPieceType::kick:      return 120.0f;
-        case DrumPieceType::floorTom:  return 96.0f;
-        case DrumPieceType::snare:     return 84.0f;
-        case DrumPieceType::rackTom:   return 72.0f;
-        case DrumPieceType::hiHat:     return 68.0f;
-        case DrumPieceType::crash:     return 104.0f;
-        case DrumPieceType::ride:      return 110.0f;
-        case DrumPieceType::china:     return 100.0f;
-        case DrumPieceType::splash:    return 80.0f;
-        default:                       return 70.0f;
+        case DrumPieceType::kick:      return 22.0f;
+        case DrumPieceType::floorTom:  return 16.0f;
+        case DrumPieceType::snare:     return 14.0f;
+        case DrumPieceType::rackTom:   return 12.0f;
+        case DrumPieceType::hiHat:     return 14.0f;
+        case DrumPieceType::crash:     return 18.0f;
+        case DrumPieceType::ride:      return 20.0f;
+        case DrumPieceType::china:     return 18.0f;
+        case DrumPieceType::splash:    return 10.0f;
+        default:                       return 12.0f;
     }
+}
+
+/** Visual diameter on the layout canvas from a real-world inch measurement. */
+inline float pieceDiameterPixelsFromInches (float diameterInches)
+{
+    return juce::jlimit (8.0f, 200.0f, diameterInches * kLayoutPixelsPerInch);
+}
+
+/** Top-down kit view diameter (width == height) in canvas pixels. */
+inline float defaultPieceSize (DrumPieceType type)
+{
+    return pieceDiameterPixelsFromInches (defaultPieceDiameterInches (type));
 }
 
 inline juce::String defaultPieceDisplayName (DrumPieceType type)
@@ -147,7 +162,7 @@ inline juce::Colour drumShellRimColour()      { return juce::Colours::black; }
 inline juce::Colour cymbalFillColour()        { return juce::Colour (0xff4a4a4a); }
 inline juce::Colour cymbalRimColour()         { return juce::Colours::black; }
 
-/** Paint order for top-down kit view: kick back, toms mid, cymbals front. Lower = further back. */
+/** Paint order for top-down kit view. Lower = further back (drawn first). */
 inline int displayLayerOrder (DrumPieceType type)
 {
     switch (type)
@@ -156,12 +171,12 @@ inline int displayLayerOrder (DrumPieceType type)
         case DrumPieceType::snare:
         case DrumPieceType::rackTom:
         case DrumPieceType::floorTom: return 10;
-        case DrumPieceType::accessory: return 15;
-        case DrumPieceType::hiHat:
-        case DrumPieceType::crash:
         case DrumPieceType::ride:
-        case DrumPieceType::china:
-        case DrumPieceType::splash:   return 20;
+        case DrumPieceType::hiHat:    return 20;
+        case DrumPieceType::splash:
+        case DrumPieceType::crash:    return 30;
+        case DrumPieceType::china:    return 40;
+        case DrumPieceType::accessory: return 25;
         default:                      return 10;
     }
 }

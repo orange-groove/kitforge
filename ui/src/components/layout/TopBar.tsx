@@ -8,12 +8,16 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  MenuDivider,
 } from "@chakra-ui/react";
 import { kitforgeBridge } from "../../bridge/kitforgeBridge";
+import { AddPieceMenuItems } from "../kit/AddPieceMenu";
 
 interface TopBarProps {
   kitName: string;
   editLayout: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   onToggleEditLayout: () => void;
   onStartLearn: () => void;
   learnActive: boolean;
@@ -22,6 +26,8 @@ interface TopBarProps {
 export function TopBar({
   kitName,
   editLayout,
+  canUndo,
+  canRedo,
   onToggleEditLayout,
   onStartLearn,
   learnActive,
@@ -58,6 +64,47 @@ export function TopBar({
               Save As…
             </MenuItem>
             <MenuItem onClick={() => kitforgeBridge.loadKit()}>Load…</MenuItem>
+            <MenuDivider borderColor="kit.border" />
+            <MenuItem
+              command="⌘Z"
+              isDisabled={!canUndo}
+              onClick={() => kitforgeBridge.undo()}
+            >
+              Undo
+            </MenuItem>
+            <MenuItem
+              command="⇧⌘Z"
+              isDisabled={!canRedo}
+              onClick={() => kitforgeBridge.redo()}
+            >
+              Redo
+            </MenuItem>
+          </MenuList>
+        </Menu>
+        <Menu>
+          <MenuButton
+            as={Button}
+            size="sm"
+            variant="ghost"
+            colorScheme="gray"
+            fontWeight="normal"
+          >
+            Kit
+          </MenuButton>
+          <MenuList minW="200px">
+            <Menu placement="right-start" isLazy gutter={4}>
+              <MenuButton
+                as={MenuItem}
+                closeOnSelect={false}
+                _hover={{ bg: "kit.border" }}
+                _focus={{ bg: "kit.border" }}
+              >
+                Add Piece…
+              </MenuButton>
+              <MenuList minW="200px" maxH="70vh" overflowY="auto" py={2}>
+                <AddPieceMenuItems />
+              </MenuList>
+            </Menu>
           </MenuList>
         </Menu>
         <Box fontSize="sm" color="kit.textMuted">

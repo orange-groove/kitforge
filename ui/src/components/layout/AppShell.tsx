@@ -11,6 +11,8 @@ import type { DrumPiece, InstalledKit, KitModel, SwapTarget } from "../../types/
 
 interface AppShellProps {
   kit: KitModel;
+  canUndo: boolean;
+  canRedo: boolean;
   installed: InstalledKit[];
   aiLoading: boolean;
   aiMessage: string | null;
@@ -21,6 +23,8 @@ interface AppShellProps {
 
 export function AppShell({
   kit,
+  canUndo,
+  canRedo,
   installed,
   aiLoading,
   aiMessage,
@@ -44,25 +48,22 @@ export function AppShell({
     if (!selectedId || !selectedArticulationName) return;
 
     const piece = kit.pieces.find((p) => p.id === selectedId);
-    if (!piece) {
-      setSelectedId(null);
-      setSelectedArticulationId(null);
-      setSelectedArticulationName(null);
-      return;
-    }
+    if (!piece) return;
 
     const target = selectedArticulationName.toLowerCase();
     const art = piece.articulations.find((a) => a.name.toLowerCase() === target);
     if (art && art.id !== selectedArticulationId) {
       setSelectedArticulationId(art.id);
     }
-  }, [kit, selectedId, selectedArticulationId, selectedArticulationName]);
+  }, [kit, selectedId, selectedArticulationName, selectedArticulationId]);
 
   return (
     <Flex direction="column" h="100vh" bg="kit.bg" position="relative">
       <TopBar
         kitName={kit.kitName}
         editLayout={editLayout}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onToggleEditLayout={() => setEditLayout((v) => !v)}
         onStartLearn={learn.start}
         learnActive={learn.active}
@@ -80,17 +81,20 @@ export function AppShell({
         <Box flex="1" p={3} display="flex" minW={0} position="relative">
           <DrumCanvas
             kit={kit}
-            selectedPieceId={selectedId}
-            selectedArticulationId={selectedArticulationId}
             editLayout={editLayout}
             onSwapSamples={onSwapSamples}
             learnActivePieceId={learn.activePieceId}
             learnDonePieceIds={learn.donePieceIds}
-            onSelectPiece={(pieceId, articulationId) => {
+            onSelectPiece={(pieceId, articulationId, articulationName) => {
               setSelectedId(pieceId);
               if (pieceId == null) {
                 setSelectedArticulationId(null);
                 setSelectedArticulationName(null);
+                return;
+              }
+              if (articulationName != null) {
+                setSelectedArticulationName(articulationName);
+                setSelectedArticulationId(articulationId ?? null);
                 return;
               }
               if (articulationId == null) {
@@ -115,8 +119,13 @@ export function AppShell({
         >
           <KitInspector
             piece={selectedPiece}
-            selectedArticulationId={selectedArticulationId}
-            onSelectArticulation={setSelectedArticulationId}
+            canvasWidth={kit.canvasWidth}
+            canvasHeight={kit.canvasHeight}
+            selectedArticulationName={selectedArticulationName}
+            onSelectArticulation={(articulationId, articulationName) => {
+              setSelectedArticulationName(articulationName);
+              setSelectedArticulationId(articulationId);
+            }}
             onSwapSamples={onSwapSamples}
           />
         </Box>

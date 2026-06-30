@@ -1,4 +1,5 @@
 import type {
+  DrumPieceType,
   NativeMessage,
   OutboundMessage,
   LibraryMapping,
@@ -99,6 +100,10 @@ export const kitforgeBridge = {
     mode: "front" | "back" | "forward" | "backward",
   ) => sendRaw({ type: "reorderPiece", pieceId, mode }),
   deletePiece: (pieceId: string) => sendRaw({ type: "deletePiece", pieceId }),
+  addPiece: (pieceType: DrumPieceType, diameterInches: number) =>
+    sendRaw({ type: "addPiece", pieceType, diameterInches }),
+  undo: () => sendRaw({ type: "undo" }),
+  redo: () => sendRaw({ type: "redo" }),
   resizeEditor: (width: number, height: number) =>
     sendRaw({ type: "resizeEditor", width: Math.round(width), height: Math.round(height) }),
   saveKit: () => sendRaw({ type: "saveKit" }),

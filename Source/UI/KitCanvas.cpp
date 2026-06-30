@@ -100,15 +100,9 @@ void KitCanvas::rebuildFromModel()
     for (const auto& piece : processor.getKitModel().getPieces())
         sorted.push_back (&piece);
 
-    std::sort (sorted.begin(), sorted.end(), [] (const DrumPiece* a, const DrumPiece* b)
+    std::stable_sort (sorted.begin(), sorted.end(), [] (const DrumPiece* a, const DrumPiece* b)
     {
-        const int orderA = displayLayerOrder (a->type);
-        const int orderB = displayLayerOrder (b->type);
-
-        if (orderA != orderB)
-            return orderA < orderB;
-
-        return a->y < b->y;
+        return displayLayerOrder (a->type) < displayLayerOrder (b->type);
     });
 
     for (const auto* piece : sorted)

@@ -156,8 +156,12 @@ namespace
             if (isRoundRobinOrMicToken (t))
                 continue;
 
-            if (allDigits (t))                      // body/size number -> merge onto word
+            if (allDigits (t))
             {
+                // Trailing layer / RR index — same strike, not a different drum.
+                if (i == tokens.size() - 1)
+                    continue;
+
                 if (! kept.isEmpty())
                     kept.getReference (kept.size() - 1) += t;
 
@@ -174,13 +178,11 @@ namespace
     {
         const auto typeStr = drumPieceTypeToString (meta.instrumentType);
 
-        // Always one kick/snare/hi-hat, regardless of how it was grouped upstream.
-        if (isSinglePieceType (meta.instrumentType))
-            return typeStr;
-
-        // Prefer an LLM-assigned grouping key when present (robust to vendor naming).
         if (meta.pieceGroupKey.isNotEmpty())
             return typeStr + "|" + meta.pieceGroupKey;
+
+        if (isSinglePieceType (meta.instrumentType))
+            return typeStr;
 
         return typeStr + "|" + voiceStem (meta.filePath);
     }
@@ -590,6 +592,7 @@ KitModel KitModelBuilder::buildFromMetadata (const juce::String& kitName,
     pruneMixedVoicesImpl (model);
     assignPrimaryArticulations (model);
     ensureUniqueArticulationNotes (model);
+    KitModelBuilder::ensureUniqueArticulationIds (model);
     renamePieces (model);
 
     return model;
@@ -603,4 +606,20 @@ void KitModelBuilder::pruneMixedVoices (KitModel& model)
 void KitModelBuilder::ensureUniqueMidiNotes (KitModel& model)
 {
     ensureUniqueArticulationNotes (model);
+}
+
+void KitModelBuilder::ensureUniqueArticulationIds (KitModel& model)
+{
+    for (auto& piece : model.getPiecesMutable())
+    {
+        juce::StringArray seen;
+
+        for (auto& art : piece.articulations)
+        {
+            if (art.id.isEmpty() || seen.contains (art.id))
+                art.id = Articulation::makeId();
+
+            seen.add (art.id);
+        }
+    }
 }

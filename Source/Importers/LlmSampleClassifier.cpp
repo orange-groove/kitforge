@@ -59,6 +59,8 @@ namespace
         juce::String name;
         juce::String folder;
         std::set<int> midiNotes;
+        std::set<int> layerNumbers;
+        juce::StringArray examples;
         int count = 0;
         std::vector<size_t> sampleIndices;
     };
@@ -93,6 +95,12 @@ namespace
             ++sc.count;
             sc.sampleIndices.push_back (i);
 
+            if (sc.examples.size() < 3)
+                sc.examples.add (juce::File (meta.filePath).getFileName());
+
+            if (meta.layerIndex > 0)
+                sc.layerNumbers.insert (meta.layerIndex);
+
             if (meta.midiNote > 0)
                 sc.midiNotes.insert (meta.midiNote);
         }
@@ -119,7 +127,17 @@ namespace
             for (int note : sc.midiNotes)
                 midi.add (note);
 
+            juce::Array<juce::var> layers;
+            for (int layer : sc.layerNumbers)
+                layers.add (layer);
+
+            juce::Array<juce::var> examples;
+            for (const auto& ex : sc.examples)
+                examples.add (ex);
+
             obj->setProperty ("midi", midi);
+            obj->setProperty ("layerNumbers", layers);
+            obj->setProperty ("examples", examples);
             obj->setProperty ("count", sc.count);
             arr.add (juce::var (obj));
         }
@@ -163,6 +181,7 @@ namespace
         DrumPieceType type = DrumPieceType::accessory;
         juce::String piece;
         juce::String articulation;
+        juce::String layerScheme;
         bool set = false;
     };
 
@@ -193,6 +212,7 @@ namespace
             a.type = parseType (entry.getProperty ("type", "accessory").toString());
             a.piece = entry.getProperty ("piece", "").toString().trim();
             a.articulation = entry.getProperty ("articulation", "").toString().trim();
+            a.layerScheme = entry.getProperty ("layerScheme", "auto").toString().trim().toLowerCase();
             a.set = true;
             out[(size_t) ref] = a;
         }
@@ -213,7 +233,7 @@ namespace
 
         names.sort (false);
 
-        const auto keyText = kitName + "\n" + names.joinIntoString ("\n");
+        const auto keyText = "classify-v2\n" + kitName + "\n" + names.joinIntoString ("\n");
         const auto hash = juce::String ((juce::int64) keyText.hashCode64());
 
         return KitForgePaths::getKitForgeRoot()
@@ -228,29 +248,41 @@ juce::String LlmSampleClassifier::systemPrompt()
     return R"(You are a drum-library librarian. You are given the distinct sample-name patterns from ONE drum library. Group them into the physical instruments of a drum kit and label each pattern with its articulation.
 
 Reply with ONLY valid JSON, no prose:
-{ "map": [ { "ref": number, "type": string, "piece": string, "articulation": string } ] }
+{ "map": [ { "ref": number, "type": string, "piece": string, "articulation": string, "layerScheme": string } ] }
 
-RULES
+FIELDS
+- "type": kick, snare, rackTom, floorTom, hiHat, crash, ride, china, splash, or accessory.
+- "piece": STABLE grouping key. Same piece = one drum with multiple articulations. Different piece = separate drums.
+- "articulation": short label (Center, Bow, Bell, Edge, Rimshot, Sidestick, Closed, Open, Pedal, etc.).
+- "layerScheme": how trailing layer numbers behave for this pattern:
+    "auto"       — default; KitForge applies Kontakt-style rules from layerNumbers
+    "roundRobin" — all layer numbers are round-robin variants of one velocity range
+    "velocity"   — each layer number is a separate velocity layer
+  Use "auto" unless the examples clearly show only RR or only velocity layering.
+
+INPUT HINTS
+Each class includes "examples" (real filenames) and "layerNumbers" (trailing indices found).
+Native Instruments / Kontakt often uses: "{Instrument} - {Part} - {Layer}.wav"
+  - The trailing number is NOT a separate drum — it belongs to the same ref/piece+articulation.
+  - layerNumbers like [1,2,3,4,5,6,7,8] on one class are layers of ONE articulation, not eight drums.
+
+GROUPING GUIDANCE
+- kick, snare, hiHat: usually ONE piece each (piece "kick", "snare", "hihat") unless clearly distinct bodies (e.g. "bop kick" = piece "bop-kick", type kick).
+- Snare techniques (rimshot, sidestick, cross stick, stickshot) = articulations on piece "snare", type snare.
+- Hi-hat: closed/tight = Closed, open = Open, foot/pedal = Pedal — one piece "hihat".
+- Cymbal sizes distinguish different cymbals: separate pieces (e.g. "crash-16", "ride-20", "flat-ride").
+- Cymbal zones (bow/center, bell, edge, crash) = articulations sharing the cymbal's piece.
+- Toms: separate piece per drum; rackTom vs floorTom by size/pitch (lower = floorTom).
+- IGNORE mic tokens (L, R, stereo, OH, room) — they do not create new pieces.
+
 - Output exactly one entry for EVERY ref in the input. Do not invent refs.
-- "type" must be one of: kick, snare, rackTom, floorTom, hiHat, crash, ride, china, splash, accessory.
-- "piece" is a STABLE grouping key. Patterns that share the same "piece" become ONE drum with multiple articulations. Patterns with different "piece" become separate drums.
-- "articulation" is a short, human label (Center, Bow, Bell, Edge, Rimshot, Sidestick, Closed, Open, Pedal, Choke, etc.).
 
-GROUPING GUIDANCE (general, not vendor-specific)
-- kick, snare, and hiHat collapse to ONE piece each, even across body variants (e.g. "Snare65", "Snr67NR", "SideStick", "Rimshot" are all the single snare; "Cnt"/"reg" = Center, plus Rimshot and Sidestick articulations). Use piece "kick", "snare", "hihat".
-- Hi-hat: closed/tight = Closed, open/loose = Open, foot/pedal/chick = Pedal -- all one hi-hat piece.
-- Cymbal SIZES distinguish DIFFERENT cymbals: "13in", "16in", "17in", "20in" are separate pieces (e.g. piece "crash-16", "ride-17", "ride-20").
-- On cymbals: "Cnt"/"center"/"tip"/"bow" = Bow; "bell" = Bell; "edge"/"shoulder" = Edge. These are articulations of the SAME cymbal, so they share its piece.
-- Toms: separate pieces per drum; choose rackTom vs floorTom by pitch/size (lower/larger = floorTom).
-- IGNORE mic/channel tokens (L, R, stereo, mono, OH, room, close) and any leftover numbers -- they do not create new pieces.
+WORKED EXAMPLE (underscore naming)
+Input: name "hihat_closed", examples ["hihat - closed - 1.wav"], layerNumbers [1..8], count 8
+Output: { ref:N, type:"hiHat", piece:"hihat", articulation:"Closed", layerScheme:"auto" }
 
-WORKED EXAMPLE
-Input names: "Ride_17in_L_Cnt_Tip" (midi 51), "Ride_Bell_17in_L_Tip" (midi 53), "Ride_20in_R_Cnt_Tip" (midi 51), "Ride_Bell_20in_R_Tip" (midi 53)
-Correct output: two rides --
-  { ref:.., type:"ride", piece:"ride-17", articulation:"Bow" }
-  { ref:.., type:"ride", piece:"ride-17", articulation:"Bell" }
-  { ref:.., type:"ride", piece:"ride-20", articulation:"Bow" }
-  { ref:.., type:"ride", piece:"ride-20", articulation:"Bell" })";
+Input: name "bop_kick_snares_off", examples ["bop kick - snares off - 2.wav"]
+Output: { ref:N, type:"kick", piece:"bop-kick", articulation:"Bop Snares Off", layerScheme:"auto" })";
 }
 
 bool LlmSampleClassifier::classify (const juce::String& kitName, std::vector<SampleMetadata>& samples)
@@ -307,6 +339,9 @@ bool LlmSampleClassifier::classify (const juce::String& kitName, std::vector<Sam
 
             if (a.articulation.isNotEmpty())
                 meta.articulation = a.articulation;
+
+            if (a.layerScheme.isNotEmpty())
+                meta.layerScheme = a.layerScheme;
         }
     }
 

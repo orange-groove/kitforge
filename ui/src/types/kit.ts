@@ -177,7 +177,7 @@ export interface ValidationReport {
 }
 
 export type NativeMessage =
-  | { type: "kitState"; kit: KitModel }
+  | { type: "kitState"; kit: KitModel; canUndo: boolean; canRedo: boolean }
   | { type: "catalogState"; installed: InstalledKit[] }
   | { type: "kitInstalled"; kitId: string; kitName: string; message: string }
   | { type: "kitSaved"; message: string }
@@ -193,6 +193,7 @@ export type NativeMessage =
   | { type: "sampleSwapCompleted"; pieceId: string; articulationId: string; sampleSetId: string }
   | { type: "sampleSwapFailed"; message: string }
   | { type: "validationState"; report: ValidationReport }
+  | { type: "pieceHit"; pieceId: string }
   | { type: "busy"; label: string }
   | { type: "error"; message: string };
 
@@ -209,6 +210,9 @@ export type OutboundMessage =
   | { type: "setArticulationMidi"; pieceId: string; articulationId: string; midiNote: number }
   | { type: "reorderPiece"; pieceId: string; mode: "front" | "back" | "forward" | "backward" }
   | { type: "deletePiece"; pieceId: string }
+  | { type: "addPiece"; pieceType: DrumPieceType; diameterInches: number }
+  | { type: "undo" }
+  | { type: "redo" }
   | { type: "resizeEditor"; width: number; height: number }
   | { type: "saveKit" }
   | { type: "saveKitAs" }

@@ -76,6 +76,9 @@ private:
     void handleSetArticulationMidi (const juce::var& message);
     void handleReorderPiece (const juce::var& message);
     void handleDeletePiece (const juce::var& message);
+    void handleAddPiece (const juce::var& message);
+    void handleUndo (const juce::var& message);
+    void handleRedo (const juce::var& message);
     void handleResizeEditor (const juce::var& message);
     void handleSaveKit();
     void handleSaveKitAs();

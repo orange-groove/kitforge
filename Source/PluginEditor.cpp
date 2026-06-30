@@ -52,6 +52,10 @@ KitForgeAudioProcessorEditor::KitForgeAudioProcessorEditor (KitForgeAudioProcess
     addChildComponent (fallbackLabel);
 
     loadWebViewUrl();
+
+    // Baseline the hit counters so only notes played after the editor opens flash.
+    processorRef.getSamplerEngine().readHitCounters (lastHitCounters.data());
+    startTimerHz (30);
 #else
     fallbackLabel.setText ("KitForge WebView UI is disabled.\nRebuild with JUCE_WEB_BROWSER=1.",
                            juce::dontSendNotification);
@@ -116,6 +120,53 @@ void KitForgeAudioProcessorEditor::loadKit()
         bridge->requestLoadKit();
 #endif
 }
+
+void KitForgeAudioProcessorEditor::timerCallback()
+{
+#if JUCE_WEB_BROWSER
+    pollEngineHits();
+#endif
+}
+
+#if JUCE_WEB_BROWSER
+void KitForgeAudioProcessorEditor::pollEngineHits()
+{
+    if (bridge == nullptr)
+        return;
+
+    std::array<juce::uint32, DrumSamplerEngine::kNumMidiNotes> current {};
+    processorRef.getSamplerEngine().readHitCounters (current.data());
+
+    // Collect newly-hit pieces under the model lock, then notify the UI after releasing it
+    // (so a slow WebView call can never stall the audio thread waiting on the lock).
+    juce::StringArray hitPieceIds;
+
+    {
+        const juce::ScopedLock lock (processorRef.getModelLock());
+        auto& model = processorRef.getKitModel();
+
+        for (int note = 0; note < DrumSamplerEngine::kNumMidiNotes; ++note)
+        {
+            if (current[(size_t) note] == lastHitCounters[(size_t) note])
+                continue;
+
+            lastHitCounters[(size_t) note] = current[(size_t) note];
+
+            const auto ref = model.findArticulationByMidiNote (note);
+            if (ref.piece != nullptr)
+                hitPieceIds.addIfNotAlreadyThere (ref.piece->id);
+        }
+    }
+
+    for (const auto& pieceId : hitPieceIds)
+    {
+        auto* obj = new juce::DynamicObject();
+        obj->setProperty ("type", "pieceHit");
+        obj->setProperty ("pieceId", pieceId);
+        bridge->sendToWeb (juce::var (obj));
+    }
+}
+#endif
 
 void KitForgeAudioProcessorEditor::paint (juce::Graphics& g)
 {

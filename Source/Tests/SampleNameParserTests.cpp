@@ -1,4 +1,6 @@
 #include "../Importers/SampleNameParser.h"
+#include "../Importers/VendorSampleNaming.h"
+#include <vector>
 
 namespace SampleNameParserSelfTests
 {
@@ -82,6 +84,46 @@ namespace SampleNameParserSelfTests
             ok &= expectEqual (meta.articulation == "Edge", "crash edge");
             ok &= expectEqual (meta.minVelocity == 1 && meta.maxVelocity == 45, "crash soft vel");
             ok &= expectEqual (meta.roundRobinIndex == 1, "crash rr");
+        }
+
+        {
+            std::vector<SampleMetadata> niSamples;
+            SampleMetadata closed;
+            closed.filePath = "hihat - closed - 1.wav";
+            closed.instrumentType = DrumPieceType::hiHat;
+            closed.pieceGroupKey = "hihat";
+            closed.articulation = "Closed";
+            closed.midiNote = 42;
+            closed.layerIndex = 1;
+            niSamples.push_back (closed);
+
+            for (int layer = 2; layer <= 8; ++layer)
+            {
+                SampleMetadata m = closed;
+                m.filePath = "hihat - closed - " + juce::String (layer) + ".wav";
+                m.layerIndex = layer;
+                niSamples.push_back (std::move (m));
+            }
+
+            VendorSampleNaming::resolveLayerAssignments (niSamples);
+            ok &= expectEqual (niSamples[0].minVelocity == 1 && niSamples[0].maxVelocity <= 16, "ni hat vel layer 1");
+            ok &= expectEqual (niSamples[7].maxVelocity == 127, "ni hat vel layer 8 top");
+            ok &= expectEqual (niSamples[0].roundRobinIndex == 0, "ni hat single sample per layer");
+        }
+
+        {
+            const auto meta = parser.parseFile (juce::File ("hihat - closed - 1.wav"));
+            ok &= expectEqual (meta.instrumentType == DrumPieceType::hiHat, "ni hihat type");
+            ok &= expectEqual (meta.articulation == "Closed", "ni hihat art");
+            ok &= expectEqual (meta.layerIndex == 1, "ni hihat layer");
+            ok &= expectEqual (meta.pieceGroupKey == "hihat", "ni hihat piece");
+        }
+
+        {
+            const auto meta = parser.parseFile (juce::File ("bop kick - snares off - 2.wav"));
+            ok &= expectEqual (meta.instrumentType == DrumPieceType::kick, "ni bop kick type");
+            ok &= expectEqual (meta.pieceGroupKey == "bop_kick", "ni bop kick piece");
+            ok &= expectEqual (meta.layerIndex == 2, "ni bop kick layer");
         }
 
         return ok;

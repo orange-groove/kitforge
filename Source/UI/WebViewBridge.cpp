@@ -291,6 +291,9 @@ void WebViewBridge::dispatchMessage (const juce::var& message)
     else if (type == "setArticulationMidi")       handleSetArticulationMidi (message);
     else if (type == "reorderPiece")              handleReorderPiece (message);
     else if (type == "deletePiece")               handleDeletePiece (message);
+    else if (type == "addPiece")                  handleAddPiece (message);
+    else if (type == "undo")                      handleUndo (message);
+    else if (type == "redo")                      handleRedo (message);
     else if (type == "resizeEditor")              handleResizeEditor (message);
     else if (type == "saveKit")                   handleSaveKit();
     else if (type == "saveKitAs")                 handleSaveKitAs();
@@ -315,10 +318,9 @@ void WebViewBridge::dispatchMessage (const juce::var& message)
 
 void WebViewBridge::handleReady()
 {
-    {
-        const juce::ScopedLock lock (processor.getModelLock());
-        processor.getKitModel().normalizeStandardArticulations();
-    }
+    // Do not mutate the kit here — normalize/dedup runs on load/import paths only.
+    // Re-normalizing on every WebView ready regenerated ride articulation ids and
+    // broke inspector selection while the UI still held stale ids.
     pushKitState();
     pushCatalogState();
 }
@@ -345,13 +347,15 @@ void WebViewBridge::handleMovePiece (const juce::var& message)
 
     if (auto* piece = processor.getKitModel().findPieceById (pieceId))
     {
+        processor.getKitModel().beginLayoutEdit();
+
         // Normalized center coordinates → top-left in layout pixel space.
         piece->x = nx * kLayoutRefWidth  - piece->width * 0.5f;
         piece->y = ny * kLayoutRefHeight - piece->height * 0.5f;
         processor.getKitModel().recordLayoutEdit();
 
         if (finalize)
-            processor.getKitModel().notifyChanged();
+            processor.getKitModel().commitLayoutEdit();
     }
 }
 
@@ -365,9 +369,20 @@ void WebViewBridge::handleResizePiece (const juce::var& message)
 
     if (auto* piece = processor.getKitModel().findPieceById (pieceId))
     {
-        piece->width  = juce::jmax (20.0f, nw * kLayoutRefWidth);
-        piece->height = juce::jmax (20.0f, nh * kLayoutRefHeight);
+        processor.getKitModel().beginLayoutEdit();
+
+        const float newW = juce::jmax (20.0f, nw * kLayoutRefWidth);
+        const float newH = juce::jmax (20.0f, nh * kLayoutRefHeight);
+        const float cx = piece->x + piece->width * 0.5f;
+        const float cy = piece->y + piece->height * 0.5f;
+
+        piece->width  = newW;
+        piece->height = newH;
+        piece->x = cx - newW * 0.5f;
+        piece->y = cy - newH * 0.5f;
+
         processor.getKitModel().recordLayoutEdit();
+        processor.getKitModel().commitLayoutEdit();
     }
 }
 
@@ -437,6 +452,8 @@ void WebViewBridge::handleUpdatePiece (const juce::var& message)
 
     if (auto* piece = processor.getKitModel().findPieceById (pieceId))
     {
+        processor.getKitModel().saveUndoCheckpoint();
+
         if (auto* obj = message.getDynamicObject())
         {
             if (obj->hasProperty ("volume")) piece->volume = (float) obj->getProperty ("volume");
@@ -459,6 +476,7 @@ void WebViewBridge::handleRenamePiece (const juce::var& message)
 
     if (auto* piece = processor.getKitModel().findPieceById (pieceId))
     {
+        processor.getKitModel().saveUndoCheckpoint();
         piece->name = newName;
         processor.getKitModel().notifyChanged();
     }
@@ -476,6 +494,8 @@ void WebViewBridge::handleSetArticulationMidi (const juce::var& message)
     {
         if (auto* art = piece->findArticulationById (artId))
         {
+            processor.getKitModel().saveUndoCheckpoint();
+
             const bool wasPrimary = piece->primaryMidiNote == art->midiNote;
             art->midiNote = note;
 
@@ -507,6 +527,38 @@ void WebViewBridge::handleDeletePiece (const juce::var& message)
     const juce::ScopedLock lock (processor.getModelLock());
 
     if (processor.getKitModel().removePiece (pieceId))
+        processor.rebuildEngine();
+}
+
+void WebViewBridge::handleAddPiece (const juce::var& message)
+{
+    const auto typeStr = message.getProperty ("pieceType", {}).toString();
+    const float diameterInches = (float) message.getProperty ("diameterInches", 14.0);
+
+    const auto type = drumPieceTypeFromString (typeStr);
+
+    if (type == DrumPieceType::accessory)
+        return;
+
+    const juce::ScopedLock lock (processor.getModelLock());
+
+    processor.getKitModel().addPieceWithDiameter (type, diameterInches, kLayoutRefWidth, kLayoutRefHeight);
+    processor.rebuildEngine();
+}
+
+void WebViewBridge::handleUndo (const juce::var&)
+{
+    const juce::ScopedLock lock (processor.getModelLock());
+
+    if (processor.getKitModel().undo())
+        processor.rebuildEngine();
+}
+
+void WebViewBridge::handleRedo (const juce::var&)
+{
+    const juce::ScopedLock lock (processor.getModelLock());
+
+    if (processor.getKitModel().redo())
         processor.rebuildEngine();
 }
 
@@ -611,6 +663,8 @@ void WebViewBridge::handleLoadKit()
                                       return;
                                   }
 
+                                  processor.getKitModel().normalizeStandardArticulations();
+                                  KitModelBuilder::ensureUniqueArticulationIds (processor.getKitModel());
                                   KitModelBuilder::ensureUniqueMidiNotes (processor.getKitModel());
                               }
 
@@ -794,6 +848,8 @@ void WebViewBridge::handleLoadInstalledKit (const juce::var& message)
             processor.getServices().getSampleIndexService().resolveKitSampleRefs (processor.getKitModel());
 
             KitModelBuilder::pruneMixedVoices (processor.getKitModel());
+            processor.getKitModel().normalizeStandardArticulations();
+            KitModelBuilder::ensureUniqueArticulationIds (processor.getKitModel());
             KitModelBuilder::ensureUniqueMidiNotes (processor.getKitModel());
             applyImportKitLayout (processor.getKitModel(), 980.0f, 680.0f);
         }
@@ -1167,6 +1223,7 @@ void WebViewBridge::handleSwapSampleSet (const juce::var& message)
 
             {
                 const juce::ScopedLock lock (processor.getModelLock());
+                processor.getKitModel().saveUndoCheckpoint();
                 result = SampleSwapService::swap (processor.getKitModel(), set, target, options);
 
                 if (result.success)
@@ -1371,6 +1428,8 @@ juce::var WebViewBridge::buildKitStateMessage() const
 
     auto msg = messageWithType ("kitState");
     msg.getDynamicObject()->setProperty ("kit", kitVar);
+    msg.getDynamicObject()->setProperty ("canUndo", processor.getKitModel().canUndo());
+    msg.getDynamicObject()->setProperty ("canRedo", processor.getKitModel().canRedo());
     return msg;
 }
 

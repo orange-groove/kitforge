@@ -1,4 +1,4 @@
-import type { DrumPiece, KitModel } from "../../types/kit";
+import type { DrumPiece, DrumPieceType, KitModel } from "../../types/kit";
 
 export const LAYOUT_REF_WIDTH = 980;
 export const LAYOUT_REF_HEIGHT = 680;
@@ -15,6 +15,13 @@ export interface PieceCircle {
   r: number;
 }
 
+export interface RefRect {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export function layoutReferenceSize(kit: KitModel): { refW: number; refH: number } {
   return {
     refW: kit.canvasWidth ?? LAYOUT_REF_WIDTH,
@@ -22,7 +29,7 @@ export function layoutReferenceSize(kit: KitModel): { refW: number; refH: number
   };
 }
 
-/** Circle geometry in layout reference pixels (always round). */
+/** UI kit state from JUCE uses normalized top-left x/y and width/height (0–1). */
 export function pieceCircleGeometry(
   piece: DrumPiece,
   refW: number,
@@ -32,6 +39,74 @@ export function pieceCircleGeometry(
   const cy = (piece.y + piece.height * 0.5) * refH;
   const diameter = Math.max(piece.width * refW, piece.height * refH);
   return { cx, cy, r: diameter * 0.5 };
+}
+
+/** Axis-aligned bounds of one piece in layout reference pixels (matches SVG render). */
+export function pieceRenderBounds(
+  piece: DrumPiece,
+  refW: number,
+  refH: number,
+): RefRect {
+  const { cx, cy, r } = pieceCircleGeometry(piece, refW, refH);
+  return {
+    minX: cx - r,
+    minY: cy - r,
+    maxX: cx + r,
+    maxY: cy + r,
+  };
+}
+
+/** Union bounding box of all pieces in layout reference pixels. */
+export function kitContentBounds(
+  pieces: DrumPiece[],
+  refW: number,
+  refH: number,
+): RefRect | null {
+  if (pieces.length === 0) return null;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const piece of pieces) {
+    const b = pieceRenderBounds(piece, refW, refH);
+    minX = Math.min(minX, b.minX);
+    minY = Math.min(minY, b.minY);
+    maxX = Math.max(maxX, b.maxX);
+    maxY = Math.max(maxY, b.maxY);
+  }
+
+  if (!Number.isFinite(minX)) return null;
+
+  return { minX, minY, maxX, maxY };
+}
+
+/** Fit view so `bounds` (plus padding) is centered in the viewport. */
+export function fitViewportToBounds(
+  bounds: RefRect,
+  viewW: number,
+  viewH: number,
+  paddingPx = 48,
+): Viewport {
+  const padded = {
+    minX: bounds.minX - paddingPx,
+    minY: bounds.minY - paddingPx,
+    maxX: bounds.maxX + paddingPx,
+    maxY: bounds.maxY + paddingPx,
+  };
+
+  const contentW = Math.max(padded.maxX - padded.minX, 1);
+  const contentH = Math.max(padded.maxY - padded.minY, 1);
+  const zoom = clampZoom(Math.min(viewW / contentW, viewH / contentH));
+  const cx = (padded.minX + padded.maxX) * 0.5;
+  const cy = (padded.minY + padded.maxY) * 0.5;
+
+  return {
+    zoom,
+    panX: viewW * 0.5 - cx * zoom,
+    panY: viewH * 0.5 - cy * zoom,
+  };
 }
 
 export function computeFitViewport(
@@ -56,40 +131,37 @@ export function computeFitViewportForKit(
   viewH: number,
   refW: number,
   refH: number,
-  padding = 0.9,
+  paddingPx = 48,
 ): Viewport {
-  if (pieces.length === 0 || viewW <= 0 || viewH <= 0) {
-    return computeFitViewport(viewW, viewH, refW, refH, padding);
+  if (viewW <= 0 || viewH <= 0) {
+    return { zoom: 1, panX: 0, panY: 0 };
   }
 
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-
-  for (const piece of pieces) {
-    const { cx, cy, r } = pieceCircleGeometry(piece, refW, refH);
-    minX = Math.min(minX, cx - r);
-    minY = Math.min(minY, cy - r);
-    maxX = Math.max(maxX, cx + r);
-    maxY = Math.max(maxY, cy + r);
+  const bounds = kitContentBounds(pieces, refW, refH);
+  if (bounds == null) {
+    return computeFitViewport(viewW, viewH, refW, refH);
   }
 
-  const contentW = Math.max(maxX - minX, 40);
-  const contentH = Math.max(maxY - minY, 40);
-  const zoom = clampZoom(Math.min(viewW / contentW, viewH / contentH) * padding);
-  const contentCx = (minX + maxX) * 0.5;
-  const contentCy = (minY + maxY) * 0.5;
-
-  return {
-    zoom,
-    panX: viewW * 0.5 - contentCx * zoom,
-    panY: viewH * 0.5 - contentCy * zoom,
-  };
+  return fitViewportToBounds(bounds, viewW, viewH, paddingPx);
 }
 
 export function clampZoom(zoom: number): number {
   return Math.min(4, Math.max(0.2, zoom));
+}
+
+/** Map pan/zoom state to an SVG viewBox (more reliable than `<g transform>` in embedded WebViews). */
+export function viewportToViewBox(
+  viewport: Viewport,
+  viewW: number,
+  viewH: number,
+): { x: number; y: number; w: number; h: number } {
+  const zoom = Math.max(viewport.zoom, 0.001);
+  return {
+    x: -viewport.panX / zoom,
+    y: -viewport.panY / zoom,
+    w: viewW / zoom,
+    h: viewH / zoom,
+  };
 }
 
 /** Screen coords → layout reference pixel coords. */
@@ -140,6 +212,43 @@ export function zoomAtPoint(
 
 export function argbToCss(argb: number): string {
   return `#${(argb & 0xffffff).toString(16).padStart(6, "0")}`;
+}
+
+/** Paint order for top-down kit view. Lower = further back (drawn first). */
+export function displayLayerOrder(type: DrumPieceType): number {
+  switch (type) {
+    case "kick":
+      return 0;
+    case "snare":
+    case "rackTom":
+    case "floorTom":
+      return 10;
+    case "ride":
+    case "hiHat":
+      return 20;
+    case "splash":
+    case "crash":
+      return 30;
+    case "china":
+      return 40;
+    case "accessory":
+      return 25;
+    default:
+      return 10;
+  }
+}
+
+/** Back → front for SVG paint order; preserves kit array order within the same layer. */
+export function sortPiecesForDisplay(pieces: DrumPiece[]): DrumPiece[] {
+  return pieces
+    .map((piece, index) => ({ piece, index }))
+    .sort((a, b) => {
+      const orderA = displayLayerOrder(a.piece.type);
+      const orderB = displayLayerOrder(b.piece.type);
+      if (orderA !== orderB) return orderA - orderB;
+      return a.index - b.index;
+    })
+    .map(({ piece }) => piece);
 }
 
 export function isKickPiece(piece: DrumPiece): boolean {
@@ -202,7 +311,11 @@ export const RIDE_EDGE_MIDI_Y = 0.72;
 
 export type RideHitZone = "bell" | "edge";
 
-export function rideArticulationFromPoint(
+export type RideArticulationRef = { id: string; name: string };
+
+/** Resolves ride Edge vs Bell from a canvas hit; returns id and name together so
+ * selection stays correct even when both articulations share the same id in the model. */
+export function rideArticulationRefFromPoint(
   piece: DrumPiece,
   clientX: number,
   clientY: number,
@@ -210,7 +323,7 @@ export function rideArticulationFromPoint(
   viewport: Viewport,
   refW: number,
   refH: number,
-): string | null {
+): RideArticulationRef | null {
   const edgeArt = rideEdgeArticulation(piece);
   const bellArt = rideBellArticulation(piece);
   if (!edgeArt) return null;
@@ -222,6 +335,28 @@ export function rideArticulationFromPoint(
 
   if (dist > r) return null;
 
-  if (bellArt != null && dist <= r * RIDE_BELL_HIT_R) return bellArt.id;
-  return edgeArt.id;
+  if (bellArt != null && dist <= r * RIDE_BELL_HIT_R) {
+    return { id: bellArt.id, name: bellArt.name };
+  }
+  return { id: edgeArt.id, name: edgeArt.name };
+}
+
+export function rideArticulationFromPoint(
+  piece: DrumPiece,
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+  viewport: Viewport,
+  refW: number,
+  refH: number,
+): string | null {
+  return rideArticulationRefFromPoint(
+    piece,
+    clientX,
+    clientY,
+    rect,
+    viewport,
+    refW,
+    refH,
+  )?.id ?? null;
 }

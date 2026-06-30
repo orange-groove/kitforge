@@ -30,4 +30,9 @@ public:
         used on load so kits with colliding notes (e.g. two rides both on 51/53)
         get separated without a re-import. */
     static void ensureUniqueMidiNotes (KitModel& model);
+
+    /** Ensures every articulation on each piece has a distinct id. Ride normalization
+        can accidentally assign the same id to Edge and Bell; duplicate ids break UI
+        selection and articulation-specific triggers. */
+    static void ensureUniqueArticulationIds (KitModel& model);
 };

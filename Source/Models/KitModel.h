@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DrumPiece.h"
+#include "KitModelHistory.h"
 #include <functional>
 #include <vector>
 
@@ -43,6 +44,10 @@ public:
     DrumPiece& addDefaultCymbal (DrumPieceType type, float canvasWidth, float canvasHeight);
     DrumPiece& addDefaultAccessory (float canvasWidth, float canvasHeight);
 
+    /** Adds a drum or cymbal; `diameterInches` sets width/height on the layout canvas. */
+    DrumPiece& addPieceWithDiameter (DrumPieceType type, float diameterInches,
+                                     float canvasWidth, float canvasHeight);
+
     bool removePiece (const juce::String& id, bool sendChangeNotification = true);
 
     /** Reorders a piece within the draw/stack order. Later pieces render on top.
@@ -76,14 +81,34 @@ public:
     void addListener (std::function<void()> listener);
     void notifyChanged();
 
+    /** Saves the current kit on the undo stack (call before mutating in-place). */
+    void saveUndoCheckpoint();
+
+    bool undo();
+    bool redo();
+    bool canUndo() const { return history.canUndo(); }
+    bool canRedo() const { return history.canRedo(); }
+    void clearUndoHistory();
+
+    /** One undo step per layout drag/resize gesture. */
+    void beginLayoutEdit();
+    void commitLayoutEdit();
+
 private:
     std::vector<DrumPiece> pieces;
     std::vector<std::function<void()>> listeners;
     uint64_t changeGeneration = 0;
+    KitModelHistory history;
+    bool layoutEditCheckpointSaved = false;
+
+    void assignSingleSampleInternal (DrumPiece& piece, const juce::File& file,
+                                     const juce::String& targetArticulationId);
 
     juce::Colour colourForType (DrumPieceType type) const;
     juce::Colour nextDefaultColour() const;
     DrumPiece makeBasePiece (DrumPieceType type, const juce::String& name,
                              float canvasWidth, float canvasHeight,
                              float w, float h) const;
+    void setupDefaultArticulations (DrumPiece& piece, DrumPieceType type);
+    void sortPiecesByDisplayLayer();
 };

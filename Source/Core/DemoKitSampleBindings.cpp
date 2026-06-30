@@ -1,5 +1,4 @@
 #include "DemoKitSampleBindings.h"
-#include "DemoSampleAssets.h"
 #include "../Engine/Articulation.h"
 
 namespace
@@ -58,29 +57,6 @@ juce::String DemoKitSampleBindings::sampleFileNameFor (DrumPieceType type, const
             return "ride_" + artSlug + ".wav";
         default:                      return "drum_" + artSlug + ".wav";
     }
-}
-
-bool DemoKitSampleBindings::writeBundledSamplesToFolder (const juce::File& kitRoot)
-{
-    const auto samplesDir = kitRoot.getChildFile ("samples");
-    samplesDir.createDirectory();
-
-    static const char* kAllDemoFiles[] =
-    {
-        "kick_center.wav", "snare_center.wav", "snare_rimshot.wav",
-        "rack_tom_hit.wav", "floor_tom_hit.wav", "hihat_closed.wav",
-        "hihat_open.wav", "crash_hit.wav", "ride_bow.wav"
-    };
-
-    bool anyWritten = false;
-
-    for (const auto* fileName : kAllDemoFiles)
-    {
-        if (DemoSampleAssets::writeBundledSample (samplesDir.getChildFile (fileName), fileName))
-            anyWritten = true;
-    }
-
-    return anyWritten;
 }
 
 void DemoKitSampleBindings::bindSamplePathsFromFolder (KitModel& model, const juce::File& kitRoot)

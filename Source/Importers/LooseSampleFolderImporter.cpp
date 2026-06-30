@@ -2,6 +2,7 @@
 #include "KitModelBuilder.h"
 #include "SampleNameParser.h"
 #include "LlmSampleClassifier.h"
+#include "VendorSampleNaming.h"
 
 ImportResult LooseSampleFolderImporter::scanFolder (const juce::File& folder) const
 {
@@ -57,6 +58,7 @@ ImportResult LooseSampleFolderImporter::scanFolder (const juce::File& folder) co
     }
 
     LlmSampleClassifier::classify (result.kitName, parsedSamples);
+    VendorSampleNaming::resolveLayerAssignments (parsedSamples);
 
     result.kit = KitModelBuilder::buildFromMetadata (result.kitName, parsedSamples, result.warnings);
     result.stats = ImportResult::computeStats (result.kit, wavCount);

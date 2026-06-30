@@ -27,6 +27,8 @@ bool MidiLearnManager::processMidiNote (int midiNote, KitModel& model)
         return false;
     }
 
+    model.saveUndoCheckpoint();
+
     Articulation* targetArt = nullptr;
 
     if (targetArticulationId.isNotEmpty())

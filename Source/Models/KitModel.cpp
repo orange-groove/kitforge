@@ -1,5 +1,7 @@
 #include "KitModel.h"
 #include "../Engine/Articulation.h"
+#include "KitPieceAddPlacement.h"
+#include <algorithm>
 
 namespace
 {
@@ -184,21 +186,24 @@ void ensureStandardArticulations (DrumPiece& piece)
         }
 
         if (art.name.equalsIgnoreCase ("Edge") && edge.id.isEmpty())
+        {
             edge.id = art.id;
+            edge.midiNote = art.midiNote;
+        }
 
         if (art.name.equalsIgnoreCase ("Bell") && bell.id.isEmpty())
+        {
             bell.id = art.id;
+            bell.midiNote = art.midiNote;
+        }
 
         if ((art.name.equalsIgnoreCase ("Bow")
           || art.name.equalsIgnoreCase ("Ride"))
             && edge.id.isEmpty())
+        {
             edge.id = art.id;
-
-        if (art.midiNote == 51 && edge.id.isEmpty())
-            edge.id = art.id;
-
-        if (art.midiNote == 53 && bell.id.isEmpty())
-            bell.id = art.id;
+            edge.midiNote = art.midiNote;
+        }
     }
 
     if (edge.layers.empty())
@@ -219,10 +224,16 @@ void ensureStandardArticulations (DrumPiece& piece)
     if (bell.id.isEmpty())
         bell.id = Articulation::makeId();
 
+    // A single mis-tagged source articulation can otherwise assign the same id to both zones.
+    if (edge.id == bell.id)
+        bell.id = Articulation::makeId();
+
+    const int edgeNote = edge.midiNote;
+
     piece.articulations.clear();
     piece.articulations.push_back (std::move (edge));
     piece.articulations.push_back (std::move (bell));
-    piece.primaryMidiNote = 51;
+    piece.primaryMidiNote = edgeNote;
     piece.syncMidiNotesFromArticulations();
 }
 
@@ -283,13 +294,26 @@ ArticulationRef KitModel::findArticulation (const juce::String& pieceId, const j
 
 DrumPiece& KitModel::addPiece (DrumPiece piece)
 {
+    saveUndoCheckpoint();
+
     if (piece.id.isEmpty())
         piece.id = DrumPiece::makeId();
 
+    const auto addedId = piece.id;
     piece.syncMidiNotesFromArticulations();
     pieces.push_back (std::move (piece));
+    sortPiecesByDisplayLayer();
     notifyChanged();
-    return pieces.back();
+    return *findPieceById (addedId);
+}
+
+void KitModel::sortPiecesByDisplayLayer()
+{
+    std::stable_sort (pieces.begin(), pieces.end(),
+                      [] (const DrumPiece& a, const DrumPiece& b)
+                      {
+                          return displayLayerOrder (a.type) < displayLayerOrder (b.type);
+                      });
 }
 
 DrumPiece KitModel::makeBasePiece (DrumPieceType type, const juce::String& name,
@@ -310,16 +334,45 @@ DrumPiece KitModel::makeBasePiece (DrumPieceType type, const juce::String& name,
     return piece;
 }
 
-DrumPiece& KitModel::addDefaultDrum (DrumPieceType type, float canvasWidth, float canvasHeight)
+void KitModel::setupDefaultArticulations (DrumPiece& piece, DrumPieceType type)
 {
-    const float size = defaultPieceSize (type);
-    auto piece = makeBasePiece (type, defaultPieceDisplayName (type), canvasWidth, canvasHeight, size, size);
-    piece.shapeType = defaultShapeForType (type);
-    piece.color = isCymbalPieceType (type) ? cymbalFillColour() : drumShellFillColour();
+    if (isCymbalPieceType (type))
+    {
+        if (type == DrumPieceType::hiHat)
+        {
+            piece.chokeGroupId = "hat";
+            piece.addArticulation (makeArticulation ("Closed", piece.primaryMidiNote));
+
+            int openNote = 46;
+
+            if (isMidiNoteInUse (openNote) || openNote == piece.primaryMidiNote)
+                openNote = suggestNextMidiNote();
+
+            piece.addArticulation (makeArticulation ("Open", openNote, "hat"));
+            piece.syncMidiNotesFromArticulations();
+        }
+        else if (type == DrumPieceType::ride)
+        {
+            piece.addArticulation (makeArticulation ("Edge", 51));
+            piece.addArticulation (makeArticulation ("Bell", 53));
+            piece.primaryMidiNote = 51;
+            piece.syncMidiNotesFromArticulations();
+        }
+        else
+        {
+            piece.addArticulation (makeArticulation ("Hit", piece.primaryMidiNote));
+        }
+
+        return;
+    }
 
     if (type == DrumPieceType::kick)
+    {
         piece.addArticulation (makeArticulation ("Center", piece.primaryMidiNote));
-    else if (type == DrumPieceType::snare)
+        return;
+    }
+
+    if (type == DrumPieceType::snare)
     {
         piece.addArticulation (makeArticulation ("Center", piece.primaryMidiNote));
 
@@ -330,48 +383,39 @@ DrumPiece& KitModel::addDefaultDrum (DrumPieceType type, float canvasWidth, floa
 
         piece.addArticulation (makeArticulation ("Rimshot", rimNote));
         piece.syncMidiNotesFromArticulations();
+        return;
     }
-    else
-        piece.addArticulation (makeArticulation ("Hit", piece.primaryMidiNote));
 
+    piece.addArticulation (makeArticulation ("Hit", piece.primaryMidiNote));
+}
+
+DrumPiece& KitModel::addPieceWithDiameter (DrumPieceType type, float diameterInches,
+                                             float canvasWidth, float canvasHeight)
+{
+    diameterInches = juce::jlimit (8.0f, 24.0f, diameterInches);
+    const float diameterPx = pieceDiameterPixelsFromInches (diameterInches);
+    const auto name = juce::String (juce::roundToInt (diameterInches)) + "\" "
+                    + defaultPieceDisplayName (type);
+
+    auto piece = makeBasePiece (type, name, canvasWidth, canvasHeight, diameterPx, diameterPx);
+    setupDefaultArticulations (piece, type);
     normalizePieceVisuals (piece);
-    return addPiece (std::move (piece));
+    auto& added = addPiece (std::move (piece));
+    applyTomLayoutForNewPiece (*this, added, canvasWidth, canvasHeight);
+    applyHiHatLayoutForNewPiece (*this, added, canvasWidth, canvasHeight);
+    applyRideLayoutForNewPiece (*this, added, canvasWidth, canvasHeight);
+    notifyChanged();
+    return added;
+}
+
+DrumPiece& KitModel::addDefaultDrum (DrumPieceType type, float canvasWidth, float canvasHeight)
+{
+    return addPieceWithDiameter (type, defaultPieceDiameterInches (type), canvasWidth, canvasHeight);
 }
 
 DrumPiece& KitModel::addDefaultCymbal (DrumPieceType type, float canvasWidth, float canvasHeight)
 {
-    const float size = defaultPieceSize (type);
-    auto piece = makeBasePiece (type, defaultPieceDisplayName (type), canvasWidth, canvasHeight, size, size);
-    piece.shapeType = ShapeType::circle;
-    piece.color = cymbalFillColour();
-
-    if (type == DrumPieceType::hiHat)
-    {
-        piece.chokeGroupId = "hat";
-        piece.addArticulation (makeArticulation ("Closed", piece.primaryMidiNote));
-
-        int openNote = 46;
-
-        if (isMidiNoteInUse (openNote) || openNote == piece.primaryMidiNote)
-            openNote = suggestNextMidiNote();
-
-        piece.addArticulation (makeArticulation ("Open", openNote, "hat"));
-        piece.syncMidiNotesFromArticulations();
-    }
-    else if (type == DrumPieceType::ride)
-    {
-        piece.addArticulation (makeArticulation ("Edge", 51));
-        piece.addArticulation (makeArticulation ("Bell", 53));
-        piece.primaryMidiNote = 51;
-        piece.syncMidiNotesFromArticulations();
-    }
-    else
-    {
-        piece.addArticulation (makeArticulation ("Hit", piece.primaryMidiNote));
-    }
-
-    normalizePieceVisuals (piece);
-    return addPiece (std::move (piece));
+    return addPieceWithDiameter (type, defaultPieceDiameterInches (type), canvasWidth, canvasHeight);
 }
 
 DrumPiece& KitModel::addDefaultAccessory (float canvasWidth, float canvasHeight)
@@ -390,6 +434,7 @@ bool KitModel::removePiece (const juce::String& id, bool sendChangeNotification)
     if (it == pieces.end())
         return false;
 
+    saveUndoCheckpoint();
     pieces.erase (it);
 
     if (sendChangeNotification)
@@ -407,6 +452,8 @@ bool KitModel::reorderPiece (const juce::String& id, const juce::String& mode)
 
     if (it == pieces.end() || pieces.size() < 2)
         return false;
+
+    saveUndoCheckpoint();
 
     const auto index = (size_t) std::distance (pieces.begin(), it);
     const size_t last = pieces.size() - 1;
@@ -446,6 +493,10 @@ bool KitModel::reorderPiece (const juce::String& id, const juce::String& mode)
 
 void KitModel::clear()
 {
+    if (pieces.empty())
+        return;
+
+    saveUndoCheckpoint();
     pieces.clear();
     notifyChanged();
 }
@@ -461,6 +512,7 @@ void KitModel::importContents (const KitModel& source)
         ensureStandardArticulations (piece);
     }
 
+    clearUndoHistory();
     notifyChanged();
 }
 
@@ -579,6 +631,8 @@ void KitModel::createDefaultKit (float canvasWidth, float canvasHeight)
         pieces.push_back (std::move (piece));
     }
 
+    sortPiecesByDisplayLayer();
+    clearUndoHistory();
     notifyChanged();
 }
 
@@ -610,7 +664,8 @@ bool KitModel::isMidiNoteInUse (int note, const juce::String& ignorePieceId) con
     return false;
 }
 
-void KitModel::assignSingleSample (DrumPiece& piece, const juce::File& file, const juce::String& targetArticulationId)
+void KitModel::assignSingleSampleInternal (DrumPiece& piece, const juce::File& file,
+                                           const juce::String& targetArticulationId)
 {
     Articulation* art = nullptr;
 
@@ -647,7 +702,12 @@ void KitModel::assignSingleSample (DrumPiece& piece, const juce::File& file, con
         ensureStandardArticulations (piece);
     else
         piece.syncMidiNotesFromArticulations();
+}
 
+void KitModel::assignSingleSample (DrumPiece& piece, const juce::File& file, const juce::String& targetArticulationId)
+{
+    saveUndoCheckpoint();
+    assignSingleSampleInternal (piece, file, targetArticulationId);
     notifyChanged();
 }
 
@@ -660,6 +720,8 @@ void KitModel::addVelocityLayer (DrumPiece& piece, int minVelocity, int maxVeloc
         assignSingleSample (piece, file);
         return;
     }
+
+    saveUndoCheckpoint();
 
     SampleLayer layer;
     layer.id = SampleLayer::makeId();
@@ -692,6 +754,8 @@ void KitModel::addRoundRobinSample (DrumPiece& piece, const juce::String& layerI
     if (layer == nullptr)
         return;
 
+    saveUndoCheckpoint();
+
     DrumSample sample;
     sample.id = DrumSample::makeId();
     sample.filePath = file.getFullPathName();
@@ -716,6 +780,65 @@ void KitModel::notifyChanged()
 void KitModel::recordLayoutEdit()
 {
     ++changeGeneration;
+}
+
+void KitModel::saveUndoCheckpoint()
+{
+    history.saveCheckpoint (*this);
+}
+
+bool KitModel::undo()
+{
+    if (! history.undo (*this))
+        return false;
+
+    for (auto& piece : pieces)
+    {
+        normalizePieceVisuals (piece);
+        ensureStandardArticulations (piece);
+    }
+
+    sortPiecesByDisplayLayer();
+    layoutEditCheckpointSaved = false;
+    notifyChanged();
+    return true;
+}
+
+bool KitModel::redo()
+{
+    if (! history.redo (*this))
+        return false;
+
+    for (auto& piece : pieces)
+    {
+        normalizePieceVisuals (piece);
+        ensureStandardArticulations (piece);
+    }
+
+    sortPiecesByDisplayLayer();
+    notifyChanged();
+    return true;
+}
+
+void KitModel::clearUndoHistory()
+{
+    history.clear();
+    layoutEditCheckpointSaved = false;
+}
+
+void KitModel::beginLayoutEdit()
+{
+    if (! layoutEditCheckpointSaved)
+    {
+        saveUndoCheckpoint();
+        layoutEditCheckpointSaved = true;
+    }
+}
+
+void KitModel::commitLayoutEdit()
+{
+    layoutEditCheckpointSaved = false;
+    notifyChanged();
 }
 
 juce::Colour KitModel::colourForType (DrumPieceType type) const

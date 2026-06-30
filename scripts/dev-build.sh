@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fast dev build: Ninja + Standalone only (no AU/VST3 install).
+# Fast dev build: React UI + Ninja Standalone (no AU/VST3 install).
 #
 # Usage:
 #   ./scripts/dev-build.sh              # Debug (default)
@@ -36,6 +36,9 @@ CONFIGURE_PRESET="ninja-${MODE}"
 BUILD_PRESET="standalone-${MODE}"
 BUILD_TYPE="$(echo "$MODE" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
 
+echo "→ npm run build (ui/)"
+(cd ui && npm run build)
+
 echo "→ cmake --preset ${CONFIGURE_PRESET}"
 cmake --preset "${CONFIGURE_PRESET}"
 
@@ -43,9 +46,16 @@ echo "→ cmake --build --preset ${BUILD_PRESET}"
 cmake --build --preset "${BUILD_PRESET}"
 
 APP="build-ninja/KitForge_artefacts/${BUILD_TYPE}/Standalone/KitForge.app"
+UI_DEST="${APP}/Contents/Resources/ui/dist"
+
+echo "→ copy ui/dist → ${UI_DEST}"
+rm -rf "${UI_DEST}"
+mkdir -p "$(dirname "${UI_DEST}")"
+cp -R ui/dist "${UI_DEST}"
 
 echo ""
 echo "Built: ${APP}"
+echo "UI bundle: ${UI_DEST}"
 
 if [[ "$RUN_AFTER" == true ]]; then
     open "${APP}"

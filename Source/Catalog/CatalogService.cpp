@@ -1,6 +1,5 @@
 #include "CatalogService.h"
 #include "../Core/KitForgePaths.h"
-#include "../Core/DemoKitFactory.h"
 #include "../Serialization/KitSerializer.h"
 #include "../Models/KitModel.h"
 

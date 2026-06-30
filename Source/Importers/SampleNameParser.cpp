@@ -1,4 +1,5 @@
 #include "SampleNameParser.h"
+#include "VendorSampleNaming.h"
 
 namespace
 {
@@ -38,6 +39,13 @@ namespace
 SampleMetadata SampleNameParser::parseFile (const juce::File& file) const
 {
     SampleMetadata meta;
+
+    if (VendorSampleNaming::tryApply (file, meta))
+    {
+        finalizeMetadata (meta);
+        return meta;
+    }
+
     meta.id = juce::Uuid().toString();
     meta.filePath = file.getFullPathName();
 

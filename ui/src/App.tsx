@@ -22,6 +22,8 @@ import { mockCatalog, mockKit } from "./mock/mockKit";
 
 export default function App() {
   const [kit, setKit] = useState<KitModel>(mockKit);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const [installed, setInstalled] = useState<InstalledKit[]>(mockCatalog.installed);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
@@ -59,6 +61,8 @@ export default function App() {
     switch (msg.type) {
       case "kitState":
         setKit(msg.kit);
+        setCanUndo(msg.canUndo);
+        setCanRedo(msg.canRedo);
         setAiLoading(false);
         setBusyLabel(null);
         break;
@@ -156,9 +160,26 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      const key = e.key.toLowerCase();
+      if (key === "s") {
         e.preventDefault();
         kitforgeBridge.saveKit();
+        return;
+      }
+
+      if (key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) kitforgeBridge.redo();
+        else kitforgeBridge.undo();
+        return;
+      }
+
+      if (key === "y") {
+        e.preventDefault();
+        kitforgeBridge.redo();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -179,6 +200,8 @@ export default function App() {
       )}
       <AppShell
         kit={kit}
+        canUndo={canUndo}
+        canRedo={canRedo}
         installed={installed}
         aiLoading={aiLoading}
         aiMessage={aiMessage}

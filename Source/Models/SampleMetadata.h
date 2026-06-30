@@ -26,6 +26,13 @@ struct SampleMetadata
     int maxVelocity = 127;
     int velocityValue = 0;
     int roundRobinIndex = 0;
+
+    /** Trailing layer index from vendor naming (e.g. Kontakt "... - 3.wav"). */
+    int layerIndex = 0;
+
+    /** LLM or import hint: "auto", "roundRobin", or "velocity". */
+    juce::String layerScheme;
+
     float confidence = 0.0f;
 
     float brightness = 0.5f;

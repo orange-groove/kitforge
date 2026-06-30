@@ -1,9 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "Serialization/KitSerializer.h"
-#include "Serialization/KitForgePackageReader.h"
-#include "Core/KitForgePaths.h"
-#include "Core/DemoKitSampleBindings.h"
 #include "Importers/KitModelBuilder.h"
 
 KitForgeAudioProcessor::KitForgeAudioProcessor()
@@ -11,27 +8,7 @@ KitForgeAudioProcessor::KitForgeAudioProcessor()
                            .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
     services.initialize();
-
-    if (services.consumeDemoKitRepairFlag())
-    {
-        const auto installPath = KitForgePaths::getKitInstallPath ("demo-rock-kit");
-        const auto loaded = KitForgePackageReader::loadInstalledKit (installPath);
-
-        if (loaded.success)
-        {
-            auto kit = loaded.kit;
-            kit.resolveSamplePaths (installPath);
-            DemoKitSampleBindings::bindSamplePathsFromFolder (kit, installPath);
-            kit.resolveSamplePaths (installPath);
-            kitModel.importContents (kit);
-            KitModelBuilder::ensureUniqueMidiNotes (kitModel);
-            rebuildEngine();
-        }
-    }
-    else
-    {
-        rebuildEngine();
-    }
+    rebuildEngine();
 }
 
 KitForgeAudioProcessor::~KitForgeAudioProcessor() = default;
@@ -181,14 +158,9 @@ void KitForgeAudioProcessor::setStateInformation (const void* data, int sizeInBy
     {
         const juce::ScopedLock lock (modelLock);
         KitSerializer::kitFromVar (kitModel, parsed);
+        kitModel.normalizeStandardArticulations();
+        KitModelBuilder::ensureUniqueArticulationIds (kitModel);
         KitModelBuilder::ensureUniqueMidiNotes (kitModel);
-
-        if (! DemoKitSampleBindings::kitHasAssignedSamples (kitModel))
-        {
-            const auto demoInstall = KitForgePaths::getKitInstallPath ("demo-rock-kit");
-            DemoKitSampleBindings::bindSamplePathsFromFolder (kitModel, demoInstall);
-            kitModel.resolveSamplePaths (demoInstall);
-        }
     }
 
     rebuildEngine();

@@ -23,10 +23,7 @@ public:
 
     void initialize();
 
-    bool consumeDemoKitRepairFlag() { return std::exchange (demoKitWasRepaired, false); }
-
 private:
-    bool demoKitWasRepaired = false;
     SampleIndex sampleIndex;
     SampleIndexService sampleIndexService { sampleIndex };
     SFZImporter sfzImporter;

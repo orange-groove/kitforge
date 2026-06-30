@@ -229,6 +229,9 @@ void DrumSamplerEngine::playArticulation (const DrumPiece& piece, const Articula
     if (loaded == nullptr)
         return;
 
+    // Record the hit for UI feedback (wobble/flash); lock-free, RT-safe.
+    hitCounters[(size_t) clampMidiNote (art.midiNote)].fetch_add (1, std::memory_order_relaxed);
+
     const auto chokeId = piece.effectiveChokeGroupId (art);
 
     if (chokeId.isNotEmpty())
@@ -240,6 +243,12 @@ void DrumSamplerEngine::playArticulation (const DrumPiece& piece, const Articula
                       chokeId, hostSampleRate);
         chokeManager.registerVoice (voice, chokeId);
     }
+}
+
+void DrumSamplerEngine::readHitCounters (juce::uint32* dest) const
+{
+    for (int i = 0; i < kNumMidiNotes; ++i)
+        dest[i] = hitCounters[(size_t) i].load (std::memory_order_relaxed);
 }
 
 DrumVoice* DrumSamplerEngine::allocateVoice()

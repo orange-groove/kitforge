@@ -6,6 +6,7 @@
 #include "DrumVoice.h"
 #include "SampleLoader.h"
 #include <array>
+#include <atomic>
 #include <unordered_map>
 #include <vector>
 
@@ -37,6 +38,13 @@ public:
 
     SampleLoader& getSampleLoader() { return sampleLoader; }
 
+    static constexpr int kNumMidiNotes = 128;
+
+    /** Copies the lock-free per-note hit counters (size kNumMidiNotes) for UI hit
+        feedback. Safe to call from the message thread; counters are bumped on the
+        audio thread whenever a note actually plays. */
+    void readHitCounters (juce::uint32* dest) const;
+
 private:
     struct MidiMapping
     {
@@ -62,6 +70,9 @@ private:
     std::vector<MidiMapping> midiMap;
     std::unordered_map<std::string, int> roundRobinIndices;
     double hostSampleRate = 44100.0;
+
+    /** Monotonic hit count per MIDI note; bumped on the audio thread, polled by the UI. */
+    std::array<std::atomic<juce::uint32>, kNumMidiNotes> hitCounters {};
 
     juce::CriticalSection triggerLock;
     std::vector<PendingTrigger> pendingTriggers;

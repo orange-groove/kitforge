@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Button, Flex, HStack, Text } from "@chakra-ui/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Flex, Text } from "@chakra-ui/react";
 import type { DrumPiece, KitModel, SwapTarget } from "../../types/kit";
-import { kitforgeBridge } from "../../bridge/kitforgeBridge";
+import { kitforgeBridge, subscribe } from "../../bridge/kitforgeBridge";
 import kickSvgRaw from "../../assets/kick.svg?raw";
 
 const kickSvgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(kickSvgRaw)}`;
@@ -15,22 +15,26 @@ import {
   pieceCircleGeometry,
   rideBellArticulation,
   rideEdgeArticulation,
-  rideArticulationFromPoint,
+  rideArticulationRefFromPoint,
   RIDE_BELL_R,
   RIDE_BELL_HIT_R,
   RIDE_EDGE_MIDI_Y,
   type RideHitZone,
   screenToNormalizedCenter,
+  sortPiecesForDisplay,
   type Viewport,
+  viewportToViewBox,
   zoomAtPoint,
 } from "./layoutUtils";
-
+import { CanvasViewportControls } from "./CanvasViewportControls";
 interface DrumCanvasProps {
   kit: KitModel;
-  selectedPieceId: string | null;
-  selectedArticulationId: string | null;
   editLayout: boolean;
-  onSelectPiece: (pieceId: string | null, articulationId?: string | null) => void;
+  onSelectPiece: (
+    pieceId: string | null,
+    articulationId?: string | null,
+    articulationName?: string | null,
+  ) => void;
   onSwapSamples: (target: SwapTarget) => void;
   /** Piece currently listening in the Learn My Kit wizard (blue highlight). */
   learnActivePieceId?: string | null;
@@ -41,7 +45,6 @@ interface DrumCanvasProps {
 const CLICK_SLOP_PX = 6;
 
 const DRUM_RIM_COLOR = "#231f20";
-const DRUM_SELECTED_RIM_COLOR = "#5b8def";
 
 /**
  * Inline render of `assets/drum.svg` so the head and rim can be recolored at
@@ -100,8 +103,6 @@ type PendingInteraction = {
 
 export function DrumCanvas({
   kit,
-  selectedPieceId,
-  selectedArticulationId,
   editLayout,
   onSelectPiece,
   onSwapSamples,
@@ -114,8 +115,12 @@ export function DrumCanvas({
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
 
+  const kitRef = useRef(kit);
+  kitRef.current = kit;
+
   const panDrag = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   const pendingInteraction = useRef<PendingInteraction | null>(null);
+  const userAdjustedViewRef = useRef(false);
   const pieceDrag = useRef<{
     pieceId: string;
     pointerId: number;
@@ -140,6 +145,9 @@ export function DrumCanvas({
 
   const [hitPieceIds, setHitPieceIds] = useState<Set<string>>(() => new Set());
   const hitTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Bumped on every hit; used as the React key of the cymbal group so its
+  // one-shot wobble animation replays from the start on each strike.
+  const [wobbleNonce, setWobbleNonce] = useState<Record<string, number>>({});
 
   const flashHit = useCallback((pieceId: string) => {
     setHitPieceIds((prev) => {
@@ -147,6 +155,7 @@ export function DrumCanvas({
       next.add(pieceId);
       return next;
     });
+    setWobbleNonce((prev) => ({ ...prev, [pieceId]: (prev[pieceId] ?? 0) + 1 }));
     const existing = hitTimers.current[pieceId];
     if (existing) clearTimeout(existing);
     hitTimers.current[pieceId] = setTimeout(() => {
@@ -167,23 +176,45 @@ export function DrumCanvas({
     };
   }, []);
 
+  // Flash/wobble pieces hit via live MIDI (the C++ engine reports each strike).
+  useEffect(() => {
+    return subscribe((msg) => {
+      if (msg.type === "pieceHit") flashHit(msg.pieceId);
+    });
+  }, [flashHit]);
+
   const [menuPiece, setMenuPiece] = useState<DrumPiece | null>(null);
   const [menuArticulationId, setMenuArticulationId] = useState<string | null>(null);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
 
   const { refW, refH } = layoutReferenceSize(kit);
-  const piecesRef = useRef(kit.pieces);
-  piecesRef.current = kit.pieces;
+  const displayPieces = useMemo(() => sortPiecesForDisplay(kit.pieces), [kit.pieces]);
+  const layoutRef = useRef({ refW, refH });
+  layoutRef.current = { refW, refH };
 
-  const applyFitToView = useCallback(() => {
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+
+  const runFit = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const w = el.clientWidth;
-    const h = el.clientHeight;
+
+    const w = sizeRef.current.w > 0 ? sizeRef.current.w : el.clientWidth;
+    const h = sizeRef.current.h > 0 ? sizeRef.current.h : el.clientHeight;
     if (w <= 0 || h <= 0) return;
-    setViewport(computeFitViewportForKit(piecesRef.current, w, h, refW, refH));
-  }, [refW, refH]);
+
+    const { refW: rw, refH: rh } = layoutRef.current;
+    const pieces = kitRef.current.pieces.map((p) => pieceForDisplay(p));
+    const next = computeFitViewportForKit(pieces, w, h, rw, rh);
+
+    userAdjustedViewRef.current = false;
+    viewportRef.current = next;
+    setViewport(next);
+  }, [pieceForDisplay]);
+
+  const runFitRef = useRef(runFit);
+  runFitRef.current = runFit;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -191,22 +222,38 @@ export function DrumCanvas({
 
     const ro = new ResizeObserver((entries) => {
       const cr = entries[0]?.contentRect;
-      if (cr) {
+      if (cr && cr.width > 0 && cr.height > 0) {
         setSize({ w: cr.width, h: cr.height });
       }
     });
     ro.observe(el);
+    // Initial measure — ResizeObserver can fire late in embedded WebViews.
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setSize({ w: rect.width, h: rect.height });
+    }
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
-    applyFitToView();
-  }, [kit.kitName, refW, refH, applyFitToView]);
+  const lastAutoFitKey = useRef("");
 
   useEffect(() => {
-    if (size.w <= 0 || size.h <= 0) return;
-    applyFitToView();
-  }, [size.w, size.h, applyFitToView]);
+    const key = `${kit.kitName}|${kit.pieces.length}|${size.w}|${size.h}|${refW}|${refH}`;
+    if (key === lastAutoFitKey.current) return;
+    lastAutoFitKey.current = key;
+    runFitRef.current();
+  }, [kit.kitName, kit.pieces.length, size.w, size.h, refW, refH]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "0" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        runFitRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -214,6 +261,7 @@ export function DrumCanvas({
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      userAdjustedViewRef.current = true;
       const rect = el.getBoundingClientRect();
       const factor = e.deltaY > 0 ? 0.9 : 1.1;
       setViewport((v) => zoomAtPoint(v, e.clientX, e.clientY, rect, factor));
@@ -223,18 +271,15 @@ export function DrumCanvas({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  const fitView = () => {
-    applyFitToView();
-  };
-
-  const nudgeZoom = (factor: number) => {
+  const nudgeZoom = useCallback((factor: number) => {
+    userAdjustedViewRef.current = true;
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const cx = rect.left + rect.width * 0.5;
     const cy = rect.top + rect.height * 0.5;
     setViewport((v) => zoomAtPoint(v, cx, cy, rect, factor));
-  };
+  }, []);
 
   const startPan = (clientX: number, clientY: number) => {
     panDrag.current = {
@@ -265,27 +310,33 @@ export function DrumCanvas({
     return null;
   };
 
-  const resolveRideArticulationId = (
+  const resolveRideArticulation = (
     piece: DrumPiece,
     target: EventTarget | null,
     clientX: number,
     clientY: number,
     refWidth: number,
     refHeight: number,
-  ): string | null => {
+  ) => {
     const edgeArt = rideEdgeArticulation(piece);
     const bellArt = rideBellArticulation(piece);
     if (!edgeArt) return null;
 
     const zone = findRideZoneFromTarget(target);
-    if (zone === "bell" && bellArt != null) return bellArt.id;
-    if (zone === "edge") return edgeArt.id;
+    if (zone === "bell" && bellArt != null) {
+      return { id: bellArt.id, name: bellArt.name };
+    }
+    if (zone === "edge") {
+      return { id: edgeArt.id, name: edgeArt.name };
+    }
 
     const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return edgeArt.id;
+    if (!rect) {
+      return { id: edgeArt.id, name: edgeArt.name };
+    }
 
     return (
-      rideArticulationFromPoint(
+      rideArticulationRefFromPoint(
         piece,
         clientX,
         clientY,
@@ -293,7 +344,7 @@ export function DrumCanvas({
         viewportRef.current,
         refWidth,
         refHeight,
-      ) ?? edgeArt.id
+      ) ?? { id: edgeArt.id, name: edgeArt.name }
     );
   };
 
@@ -318,7 +369,7 @@ export function DrumCanvas({
       }
 
       if (isRidePiece(piece)) {
-        const articulationId = resolveRideArticulationId(
+        const art = resolveRideArticulation(
           piece,
           target,
           downX,
@@ -326,11 +377,11 @@ export function DrumCanvas({
           refWidth,
           refHeight,
         );
-        if (!articulationId) return;
+        if (!art) return;
 
-        onSelectPiece(piece.id, articulationId);
+        onSelectPiece(piece.id, art.id, art.name);
         flashHit(piece.id);
-        kitforgeBridge.triggerPiece(piece.id, articulationId);
+        kitforgeBridge.triggerPiece(piece.id, art.id);
         return;
       }
 
@@ -355,7 +406,7 @@ export function DrumCanvas({
     let onClick = buildClickHandler(e.target, kit.pieces, refW, refH, e.clientX, e.clientY);
 
     if (piece && isRidePiece(piece)) {
-      const articulationId = resolveRideArticulationId(
+      const art = resolveRideArticulation(
         piece,
         e.target,
         e.clientX,
@@ -363,13 +414,14 @@ export function DrumCanvas({
         refW,
         refH,
       );
-      if (articulationId) {
-        onSelectPiece(piece.id, articulationId);
+      if (art) {
+        onSelectPiece(piece.id, art.id, art.name);
         flashHit(piece.id);
-        kitforgeBridge.triggerPiece(piece.id, articulationId);
+        kitforgeBridge.triggerPiece(piece.id, art.id);
         const ridePieceId = piece.id;
+        const rideArt = art;
         onClick = () => {
-          onSelectPiece(ridePieceId, articulationId);
+          onSelectPiece(ridePieceId, rideArt.id, rideArt.name);
         };
       }
     }
@@ -403,6 +455,7 @@ export function DrumCanvas({
     }
 
     if (panDrag.current) {
+      userAdjustedViewRef.current = true;
       const dx = e.clientX - panDrag.current.startX;
       const dy = e.clientY - panDrag.current.startY;
       setViewport((v) => ({
@@ -478,37 +531,48 @@ export function DrumCanvas({
         ? "default"
         : "grab";
 
+  const viewBox = useMemo(
+    () => viewportToViewBox(viewport, size.w, size.h),
+    [viewport, size.w, size.h],
+  );
+
   return (
     <Box
-      ref={containerRef}
       flex="1"
       position="relative"
+      minH={0}
+      minW={0}
       borderRadius="md"
       border="1px solid"
       borderColor="kit.border"
       overflow="hidden"
-      bg="#141414"
-      sx={{ touchAction: "none" }}
-      cursor={cursor}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
     >
+      <Box
+        ref={containerRef}
+        position="absolute"
+        inset={0}
+        bg="#141414"
+        sx={{ touchAction: "none" }}
+        cursor={cursor}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
       <svg
         width={size.w}
         height={size.h}
-        viewBox={`0 0 ${size.w} ${size.h}`}
-        preserveAspectRatio="xMidYMid meet"
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+        preserveAspectRatio="none"
         style={{ display: "block", shapeRendering: "geometricPrecision", flexShrink: 0 }}
       >
         <defs>
           <radialGradient
             id="kitforge-canvas-bg"
             gradientUnits="userSpaceOnUse"
-            cx={size.w * 0.5}
-            cy={size.h * 0.38}
-            r={Math.max(size.w, size.h) * 0.95}
+            cx={viewBox.x + viewBox.w * 0.5}
+            cy={viewBox.y + viewBox.h * 0.38}
+            r={Math.max(viewBox.w, viewBox.h) * 0.95}
           >
             <stop offset="0%" stopColor="#282828" />
             <stop offset="55%" stopColor="#1c1c1c" />
@@ -519,16 +583,30 @@ export function DrumCanvas({
             <stop offset="55%" stopColor="#ededed" />
             <stop offset="100%" stopColor="#c8c8c8" />
           </radialGradient>
+          <style>{`
+            @keyframes kitforge-cymbal-wobble {
+              0%   { transform: skewX(0deg); }
+              15%  { transform: skewX(-1.5deg); }
+              35%  { transform: skewX(1deg); }
+              55%  { transform: skewX(-0.6deg); }
+              75%  { transform: skewX(0.3deg); }
+              100% { transform: skewX(0deg); }
+            }
+            .kitforge-cymbal-wobble {
+              transform-box: fill-box;
+              transform-origin: center;
+              animation: kitforge-cymbal-wobble 0.45s ease-out both;
+            }
+          `}</style>
         </defs>
 
-        <rect x={0} y={0} width={size.w} height={size.h} fill="url(#kitforge-canvas-bg)" />
+        <rect x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} fill="url(#kitforge-canvas-bg)" />
 
-        <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
-          {kit.pieces.map((piece) => {
+          {displayPieces.map((piece) => {
             const displayPiece = pieceForDisplay(piece);
             const { cx, cy, r } = pieceCircleGeometry(displayPiece, refW, refH);
-            const selected = selectedPieceId === piece.id;
             const hit = hitPieceIds.has(piece.id);
+            const wob = wobbleNonce[piece.id] ?? 0;
             const learnListening = learnActivePieceId === piece.id;
             const learnDone = learnDonePieceIds?.has(piece.id) ?? false;
             const cymbal = isCymbalPiece(piece);
@@ -536,10 +614,6 @@ export function DrumCanvas({
             const isRide = isRidePiece(piece);
             const edgeArt = isRide ? rideEdgeArticulation(piece) : undefined;
             const bellArt = isRide ? rideBellArticulation(piece) : undefined;
-            const bellSelected =
-              selected && bellArt != null && selectedArticulationId === bellArt.id;
-            const edgeSelected =
-              selected && edgeArt != null && selectedArticulationId === edgeArt.id;
             const fill = argbToCss(piece.color);
             const labelColor = cymbal ? "#f0f0f0" : "#111111";
             const strokeW = (w: number) => w / viewport.zoom;
@@ -549,10 +623,11 @@ export function DrumCanvas({
             const openContextMenu = (
               e: React.MouseEvent,
               articulationId?: string,
+              articulationName?: string,
             ) => {
               e.preventDefault();
               e.stopPropagation();
-              onSelectPiece(piece.id, articulationId ?? null);
+              onSelectPiece(piece.id, articulationId ?? null, articulationName ?? null);
               setMenuPiece(piece);
               setMenuArticulationId(articulationId ?? edgeArt?.id ?? piece.articulations[0]?.id ?? null);
               setOpenSubmenu(null);
@@ -568,8 +643,8 @@ export function DrumCanvas({
               const rect = containerRef.current?.getBoundingClientRect();
               if (!rect) return;
 
-              const articulationId =
-                rideArticulationFromPoint(
+              const art =
+                rideArticulationRefFromPoint(
                   piece,
                   clientX,
                   clientY,
@@ -577,11 +652,11 @@ export function DrumCanvas({
                   viewportRef.current,
                   refW,
                   refH,
-                ) ?? edgeArt.id;
+                ) ?? { id: edgeArt.id, name: edgeArt.name };
 
-              onSelectPiece(piece.id, articulationId);
+              onSelectPiece(piece.id, art.id, art.name);
               setMenuPiece(piece);
-              setMenuArticulationId(articulationId);
+              setMenuArticulationId(art.id);
               setOpenSubmenu(null);
               setMenuPos({ x: e.clientX, y: e.clientY });
             };
@@ -599,43 +674,6 @@ export function DrumCanvas({
                   openContextMenu(e);
                 }}
               >
-                {edgeSelected && (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={r + selectionPad}
-                    fill="none"
-                    stroke="#5b8def"
-                    strokeWidth={strokeW(3)}
-                    style={{ pointerEvents: "none" }}
-                  />
-                )}
-
-                {selected && cymbal && !isRide && (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={r + selectionPad}
-                    fill="none"
-                    stroke="#5b8def"
-                    strokeWidth={strokeW(3)}
-                    style={{ pointerEvents: "none" }}
-                  />
-                )}
-
-                {selected && kick && (
-                  <rect
-                    x={cx - r - selectionPad}
-                    y={cy - r - selectionPad}
-                    width={2 * (r + selectionPad)}
-                    height={2 * (r + selectionPad)}
-                    fill="none"
-                    stroke="#5b8def"
-                    strokeWidth={strokeW(3)}
-                    style={{ pointerEvents: "none" }}
-                  />
-                )}
-
                 {kick ? (
                   <image
                     href={kickSvgUrl}
@@ -652,10 +690,13 @@ export function DrumCanvas({
                     y={cy - r}
                     size={2 * r}
                     headFill={hit ? "url(#kitforge-drumhead-hit)" : fill}
-                    rimFill={selected ? DRUM_SELECTED_RIM_COLOR : DRUM_RIM_COLOR}
+                    rimFill={DRUM_RIM_COLOR}
                   />
                 ) : (
-                  <>
+                  <g
+                    key={`wobble-${wob}`}
+                    className={wob > 0 ? "kitforge-cymbal-wobble" : undefined}
+                  >
                     <circle
                       cx={cx}
                       cy={cy}
@@ -667,17 +708,6 @@ export function DrumCanvas({
                     />
                     {isRide && edgeArt && bellArt && (
                       <>
-                        {bellSelected && (
-                          <circle
-                            cx={cx}
-                            cy={cy}
-                            r={r * RIDE_BELL_R + strokeW(2)}
-                            fill="none"
-                            stroke="#5b8def"
-                            strokeWidth={strokeW(2.5)}
-                            style={{ pointerEvents: "none" }}
-                          />
-                        )}
                         <circle
                           cx={cx}
                           cy={cy}
@@ -711,7 +741,7 @@ export function DrumCanvas({
                         </text>
                       </>
                     )}
-                  </>
+                  </g>
                 )}
 
                 <text
@@ -837,46 +867,15 @@ export function DrumCanvas({
               </g>
             );
           })}
-        </g>
       </svg>
-
-      <Flex
-        position="absolute"
-        bottom={2}
-        left={2}
-        direction="column"
-        gap={1}
-        pointerEvents="none"
-      >
-        <HStack spacing={1} pointerEvents="auto">
-          <Button size="xs" variant="solid" bg="kit.panel" onClick={() => nudgeZoom(1.15)}>
-            +
-          </Button>
-          <Button size="xs" variant="solid" bg="kit.panel" onClick={() => nudgeZoom(1 / 1.15)}>
-            −
-          </Button>
-          <Button size="xs" variant="outline" borderColor="kit.border" onClick={fitView}>
-            Fit
-          </Button>
-        </HStack>
-        <Text fontSize="10px" color="kit.textMuted" px={1}>
-          Scroll to zoom · Drag to pan · Alt+drag to pan
-        </Text>
-      </Flex>
-
-      <Box
-        position="absolute"
-        top={2}
-        right={2}
-        px={2}
-        py={1}
-        bg="blackAlpha.600"
-        borderRadius="md"
-        fontSize="xs"
-        color="kit.textMuted"
-      >
-        {Math.round(viewport.zoom * 100)}%
       </Box>
+
+      <CanvasViewportControls
+        zoomPercent={Math.round(viewport.zoom * 100)}
+        onZoomIn={() => nudgeZoom(1.15)}
+        onZoomOut={() => nudgeZoom(1 / 1.15)}
+        onFit={() => runFitRef.current()}
+      />
 
       {menuPiece && (
         <Box

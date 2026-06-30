@@ -47,20 +47,6 @@ juce_add_plugin(KitForge
     BLUETOOTH_PERMISSION_TEXT "KitForge uses Bluetooth to connect wireless MIDI controllers and drum pads."
     PRODUCT_NAME "KitForge")
 
-juce_add_binary_data(KitForgeDemoSamples
-    HEADER_NAME DemoSampleBinaryData.h
-    NAMESPACE DemoSampleBinary
-    SOURCES
-        Resources/demo-samples/kick_center.wav
-        Resources/demo-samples/snare_center.wav
-        Resources/demo-samples/snare_rimshot.wav
-        Resources/demo-samples/rack_tom_hit.wav
-        Resources/demo-samples/floor_tom_hit.wav
-        Resources/demo-samples/hihat_closed.wav
-        Resources/demo-samples/hihat_open.wav
-        Resources/demo-samples/crash_hit.wav
-        Resources/demo-samples/ride_bow.wav)
-
 juce_generate_juce_header(KitForge)
 
 target_sources(KitForge
@@ -69,11 +55,11 @@ target_sources(KitForge
         Source/PluginEditor.cpp
         Source/Core/KitForgeServices.cpp
         Source/Core/KitForgeSettings.cpp
-        Source/Core/DemoKitFactory.cpp
-        Source/Core/DemoSampleAssets.cpp
         Source/Core/DemoKitSampleBindings.cpp
         Source/Core/KitImportService.cpp
         Source/Models/KitModel.cpp
+        Source/Models/KitPieceAddPlacement.cpp
+        Source/Models/KitModelHistory.cpp
         Source/Models/SampleIndex.cpp
         Source/Models/SampleIndexService.cpp
         Source/Models/KitValidationService.cpp
@@ -92,6 +78,7 @@ target_sources(KitForge
         Source/Importers/SFZImporter.cpp
         Source/Importers/SfzDrumMappingResolver.cpp
         Source/Importers/SampleNameParser.cpp
+        Source/Importers/VendorSampleNaming.cpp
         Source/Importers/KitModelBuilder.cpp
         Source/Importers/LlmSampleClassifier.cpp
         Source/Importers/KitImportLayoutEnforcer.cpp
@@ -133,7 +120,6 @@ target_compile_definitions(KitForge
 
 target_link_libraries(KitForge
     PRIVATE
-        KitForgeDemoSamples
         juce::juce_audio_utils
         juce::juce_audio_formats
         juce::juce_gui_extra
