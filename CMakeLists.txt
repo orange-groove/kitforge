@@ -13,6 +13,12 @@ if(APPLE)
     endif()
 endif()
 
+# Static MSVC runtime — installers do not require the VC++ redistributable.
+if(WIN32)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        CACHE STRING "MSVC runtime linkage" FORCE)
+endif()
+
 project(KitForge VERSION 0.3.0)
 
 set(CMAKE_CXX_STANDARD 17)

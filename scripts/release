@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
-# Build a signed + notarized + stapled KitForge Standalone DMG for distribution.
+# Build an unsigned KitForge Standalone DMG for distribution (MVP default).
 #
-# Required environment (shell or sourced .env.release):
-#   DEVELOPER_ID_APPLICATION   "Developer ID Application: Your Name (TEAMID)"
-#   APPLE_ID                     Apple ID email
-#   APPLE_TEAM_ID                10-char team ID
-#   APPLE_APP_PASSWORD           App-specific password for notarytool
+# Signing/notarization is opt-in for later — set RELEASE_SIGN=1 and fill .env.release.
 #
 # Optional:
-#   KITFORGE_VERSION             Overrides CMake project() version in the DMG name
-#   SKIP_NOTARIZE=1              Sign locally but skip notarytool (smoke test only)
+#   KITFORGE_VERSION   Overrides CMake project() version in the DMG name
+#   RELEASE_SIGN=1     Enable Developer ID sign + notarize (requires .env.release)
 #
 # Usage:
 #   scripts/release
-#   SKIP_NOTARIZE=1 scripts/release
 #
 # Output:
 #   build-release/KitForge_artefacts/Release/Standalone/KitForge.app
@@ -29,7 +24,6 @@ DIST_DIR=${DIST_DIR:-dist}
 APP_NAME="KitForge"
 APP_PATH="${BUILD_DIR}/KitForge_artefacts/Release/Standalone/${APP_NAME}.app"
 ENTITLEMENTS="${ROOT}/Resources/${APP_NAME}.entitlements"
-BUNDLE_ID="com.kitforge.app"
 
 log()  { printf '\033[36m▶\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m!\033[0m %s\n' "$*"; }
@@ -45,17 +39,15 @@ if [[ -f .env.release ]]; then
     set +a
 fi
 
-if [[ -z "${SKIP_NOTARIZE:-}" ]]; then
+SIGN_RELEASE=false
+if [[ "${RELEASE_SIGN:-}" == "1" ]]; then
+    SIGN_RELEASE=true
     : "${DEVELOPER_ID_APPLICATION:?Set DEVELOPER_ID_APPLICATION}"
     : "${APPLE_ID:?Set APPLE_ID}"
     : "${APPLE_TEAM_ID:?Set APPLE_TEAM_ID}"
     : "${APPLE_APP_PASSWORD:?Set APPLE_APP_PASSWORD}"
-    if [[ "${DEVELOPER_ID_APPLICATION}" != *"Developer ID Application"* ]]; then
-        fail "DEVELOPER_ID_APPLICATION must be a Developer ID Application identity (security find-identity -v -p codesigning)."
-    fi
+    [[ -f "${ENTITLEMENTS}" ]] || fail "Missing entitlements at ${ENTITLEMENTS}"
 fi
-
-[[ -f "${ENTITLEMENTS}" ]] || fail "Missing entitlements at ${ENTITLEMENTS}"
 
 if ! command -v create-dmg >/dev/null 2>&1; then
     warn "create-dmg not found — installing via Homebrew..."
@@ -68,7 +60,7 @@ fi
 
 VERSION="${KITFORGE_VERSION:-$(awk '/^project\(KitForge VERSION/ {print $3}' CMakeLists.txt | tr -d ')')}"
 [[ -n "${VERSION}" ]] || fail "Could not resolve project version."
-log "Building ${APP_NAME} ${VERSION} Standalone"
+log "Building ${APP_NAME} ${VERSION} Standalone (unsigned MVP)"
 
 DEFAULT_OSX_ARCH="arm64;x86_64"
 CMAKE_ARGS=(
@@ -98,39 +90,32 @@ if [[ ! -f "${UI_DEST}/index.html" ]]; then
     cp -R ui/dist "${UI_DEST}"
 fi
 
-if [[ -n "${SKIP_NOTARIZE:-}" ]]; then
-    SIGN_ID="-"
-    log "SKIP_NOTARIZE=1 → ad-hoc signing only"
-else
+if [[ "${SIGN_RELEASE}" == true ]]; then
     SIGN_ID="${DEVELOPER_ID_APPLICATION}"
     log "Codesigning with: ${SIGN_ID}"
-fi
 
-sign_one() {
-    codesign --force \
-        --options=runtime \
-        --timestamp \
-        --entitlements "${ENTITLEMENTS}" \
-        --sign "${SIGN_ID}" \
-        "$1"
-}
+    sign_one() {
+        codesign --force \
+            --options=runtime \
+            --timestamp \
+            --entitlements "${ENTITLEMENTS}" \
+            --sign "${SIGN_ID}" \
+            "$1"
+    }
 
-log "Signing nested binaries"
-while IFS= read -r -d '' f; do
-    if file "$f" 2>/dev/null | grep -q 'Mach-O'; then
-        if [[ "$f" != "${APP_PATH}/Contents/MacOS/${APP_NAME}" ]]; then
-            sign_one "$f" || true
+    log "Signing nested binaries"
+    while IFS= read -r -d '' f; do
+        if file "$f" 2>/dev/null | grep -q 'Mach-O'; then
+            if [[ "$f" != "${APP_PATH}/Contents/MacOS/${APP_NAME}" ]]; then
+                sign_one "$f" || true
+            fi
         fi
-    fi
-done < <(find "${APP_PATH}" -type f -print0)
+    done < <(find "${APP_PATH}" -type f -print0)
 
-log "Signing main bundle"
-sign_one "${APP_PATH}"
+    log "Signing main bundle"
+    sign_one "${APP_PATH}"
+    codesign --verify --verbose=2 --strict "${APP_PATH}"
 
-log "Verifying signature"
-codesign --verify --verbose=2 --strict "${APP_PATH}"
-
-if [[ -z "${SKIP_NOTARIZE:-}" ]]; then
     NOTARIZE_ZIP="${BUILD_DIR}/${APP_NAME}-notarize.zip"
     log "Zipping for notarytool → ${NOTARIZE_ZIP}"
     rm -f "${NOTARIZE_ZIP}"
@@ -146,7 +131,8 @@ if [[ -z "${SKIP_NOTARIZE:-}" ]]; then
     log "Stapling notarization ticket"
     xcrun stapler staple "${APP_PATH}"
     xcrun stapler validate "${APP_PATH}"
-    spctl --assess --type execute --verbose=2 "${APP_PATH}"
+else
+    log "Skipping codesign and notarization (MVP unsigned build)"
 fi
 
 mkdir -p "${DIST_DIR}"
@@ -166,7 +152,7 @@ create-dmg \
     "${DMG_PATH}" \
     "${APP_PATH}"
 
-if [[ -z "${SKIP_NOTARIZE:-}" ]]; then
+if [[ "${SIGN_RELEASE}" == true ]]; then
     log "Signing DMG"
     codesign --force --timestamp --sign "${SIGN_ID}" "${DMG_PATH}"
 
@@ -177,10 +163,12 @@ if [[ -z "${SKIP_NOTARIZE:-}" ]]; then
         --password "${APPLE_APP_PASSWORD}" \
         --wait
 
-    log "Stapling DMG"
     xcrun stapler staple "${DMG_PATH}"
     xcrun stapler validate "${DMG_PATH}"
 fi
 
 log "Done."
 printf '\nArtifacts:\n  %s\n  %s\n' "${APP_PATH}" "${DMG_PATH}"
+if [[ "${SIGN_RELEASE}" != true ]]; then
+    warn "Unsigned build — users may need Right-click → Open the first time on macOS."
+fi
