@@ -5,6 +5,7 @@
 # CMake / Ninja build trees
 /build/
 /build-*/
+/dist/
 /cmake-build-*/
 CMakeUserPresets.json
 CMakeCache.txt

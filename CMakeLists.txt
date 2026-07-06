@@ -1,5 +1,18 @@
 cmake_minimum_required(VERSION 3.22)
 
+# macOS deployment + arch (before project() so they apply to JUCE too).
+if(APPLE)
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0"
+            CACHE STRING "macOS deployment target" FORCE)
+    endif()
+
+    if(NOT CMAKE_OSX_ARCHITECTURES)
+        set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64"
+            CACHE STRING "macOS architectures" FORCE)
+    endif()
+endif()
+
 project(KitForge VERSION 0.3.0)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -42,6 +55,7 @@ juce_add_plugin(KitForge
     NEEDS_WEBVIEW2 TRUE
     PLUGIN_MANUFACTURER_CODE KtFg
     PLUGIN_CODE Kitf
+    BUNDLE_ID com.kitforge.app
     FORMATS AU VST3 Standalone
     BLUETOOTH_PERMISSION_ENABLED TRUE
     BLUETOOTH_PERMISSION_TEXT "KitForge uses Bluetooth to connect wireless MIDI controllers and drum pads."
