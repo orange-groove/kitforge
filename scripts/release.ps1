@@ -57,11 +57,22 @@ if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
 Write-Step "Building KitForge $Version (unsigned Windows installer)"
 
 Write-Step "Configuring ($BuildDir)"
-cmake -B $BuildDir -G Ninja `
-    -DCMAKE_BUILD_TYPE=Release `
-    -DKITFORGE_BUILD_UI=ON `
-    -DKITFORGE_USE_DEV_SERVER=OFF `
-    -DKITFORGE_COPY_PLUGIN_AFTER_BUILD=OFF
+$CMakeArgs = @(
+    "-B", $BuildDir, "-G", "Ninja",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DKITFORGE_BUILD_UI=ON",
+    "-DKITFORGE_USE_DEV_SERVER=OFF",
+    "-DKITFORGE_COPY_PLUGIN_AFTER_BUILD=OFF"
+)
+# The plugin is declared NEEDS_WEBVIEW2, so on Windows JUCE must locate the
+# Microsoft.Web.WebView2 NuGet SDK. CI installs the package and exports
+# JUCE_WEBVIEW2_PACKAGE_LOCATION pointing at the folder that contains it; pass
+# it through so FindWebView2 succeeds. Left unset locally, JUCE falls back to
+# the default per-user NuGet packages folder.
+if ($env:JUCE_WEBVIEW2_PACKAGE_LOCATION) {
+    $CMakeArgs += "-DJUCE_WEBVIEW2_PACKAGE_LOCATION=$env:JUCE_WEBVIEW2_PACKAGE_LOCATION"
+}
+cmake @CMakeArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Step "Building Standalone + VST3"

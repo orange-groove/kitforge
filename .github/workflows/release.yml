@@ -113,6 +113,20 @@ jobs:
           }
           $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Append
 
+      - name: Set up NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Install WebView2 SDK
+        shell: pwsh
+        run: |
+          # The plugin is NEEDS_WEBVIEW2, so JUCE's FindWebView2 needs the
+          # Microsoft.Web.WebView2 NuGet package (it ships the static loader lib
+          # + headers). Install it into a stable folder and point JUCE at the
+          # PARENT dir — FindWebView2 globs "<location>/*Microsoft.Web.WebView2*".
+          $dir = Join-Path $env:GITHUB_WORKSPACE "webview2"
+          nuget install Microsoft.Web.WebView2 -OutputDirectory $dir -ExcludeVersion -NonInteractive
+          "JUCE_WEBVIEW2_PACKAGE_LOCATION=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Resolve version
         id: version
         shell: pwsh
@@ -141,11 +155,14 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     needs: [macos-release, windows-release]
+    # Publish as long as it's a tag build and AT LEAST ONE platform produced an
+    # installer. Previously this also required neither platform to fail, so a
+    # single-platform break (e.g. the Windows WebView2 issue) silently blocked
+    # the whole release — including the good macOS DMG. Per-platform download
+    # buttons already degrade gracefully when an asset is missing.
     if: >-
       always() &&
       startsWith(github.ref, 'refs/tags/') &&
-      needs.macos-release.result != 'failure' &&
-      needs.windows-release.result != 'failure' &&
       (needs.macos-release.result == 'success' || needs.windows-release.result == 'success')
     runs-on: ubuntu-latest
 
